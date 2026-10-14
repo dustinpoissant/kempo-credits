@@ -1,6 +1,6 @@
 {
   "name": "kempo-credits",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "An in-app currency for kempo — a credits ledger with paid and promotional balances, packs and promo links (planned; see PLAN.md)",
   "license": "MIT",
   "author": "Dustin Poissant",
