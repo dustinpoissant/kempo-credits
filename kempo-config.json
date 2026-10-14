@@ -2,7 +2,153 @@
   "docs": "https://github.com/dustinpoissant/kempo-credits#readme",
   "git": "https://github.com/dustinpoissant/kempo-credits",
   "public-scope": "credits",
+  "schema": "./server/db/schema.js",
   "dependencies": [
     "kempo-payments"
+  ],
+  "hooks": {
+    "payment:succeeded": "./hooks/payment-succeeded.js",
+    "payment:failed": "./hooks/payment-failed.js",
+    "payment:canceled": "./hooks/payment-canceled.js",
+    "payment:refunded": "./hooks/payment-refunded.js",
+    "payment:disputed": "./hooks/payment-disputed.js"
+  },
+  "widgets": [
+    {
+      "key": "summary",
+      "title": "Credits",
+      "description": "Credits held by users, what has been sold lately, and anything that needs an administrator.",
+      "icon": "toll",
+      "element": "k-cred-widget",
+      "module": "/credits/components/CreditsWidget.js",
+      "defaultWidth": 2,
+      "defaultHeight": 1,
+      "minWidth": 1,
+      "permission": "credits:view",
+      "priority": 78
+    }
+  ],
+  "permissions": [
+    {
+      "name": "credits:view",
+      "description": "See every user's balance and ledger, purchases and the blocked-attempt log"
+    },
+    {
+      "name": "credits:grant",
+      "description": "Give promo credits to a user, and create and manage claim links"
+    },
+    {
+      "name": "credits:adjust",
+      "description": "Take credits away, reverse a spend, claw back a grant and write off what a user owes"
+    },
+    {
+      "name": "credits:packs",
+      "description": "Create, edit, price and disable the credit packs users can buy"
+    },
+    {
+      "name": "credits:settings",
+      "description": "Change expiry, purchase limits, the refund policy and the other credits settings"
+    },
+    {
+      "name": "credits:purchase",
+      "description": "Buy credit packs for yourself. Every signed-in user holds this unless the site removes it"
+    }
+  ],
+  "settings": [
+    {
+      "name": "refund_policy",
+      "value": "Credits have no cash value and cannot be exchanged for money or transferred to another account.",
+      "type": "string",
+      "description": "Shown to the buyer beside the total before they pay, and recorded with each purchase. Say here when, and whether, unspent credits can be refunded"
+    },
+    {
+      "name": "tax_class",
+      "value": "digital",
+      "type": "string",
+      "description": "The kempo-tax class a credit pack is taxed as, when kempo-tax is installed and enabled. A class name (digital, saas…) or a Stripe txcd_ code"
+    },
+    {
+      "name": "low_balance_threshold",
+      "value": "0",
+      "type": "number",
+      "description": "Fire the credits:low hook when a user's balance drops below this many credits — once each time it crosses. 0 turns it off"
+    },
+    {
+      "name": "expiring_soon_days",
+      "value": "14",
+      "type": "number",
+      "description": "How far ahead a balance counts credits as expiring soon"
+    },
+    {
+      "name": "paid_credits_expire",
+      "value": "false",
+      "type": "boolean",
+      "description": "Whether bought credits expire. Off by default, and leave it off unless you have taken advice: expiring a prepaid balance is restricted by consumer-protection and unclaimed-property law in many places"
+    },
+    {
+      "name": "paid_credits_expiry_days",
+      "value": "365",
+      "type": "number",
+      "description": "When bought credits expire, how many days after the purchase. Ignored while paid_credits_expire is off"
+    },
+    {
+      "name": "purchase_limit_per_user",
+      "value": "10",
+      "type": "number",
+      "description": "Purchase attempts one user may start in an hour. Attempts over it are refused and logged"
+    },
+    {
+      "name": "purchase_limit_per_ip",
+      "value": "20",
+      "type": "number",
+      "description": "Purchase attempts one IP address may start in an hour, across every account using it"
+    },
+    {
+      "name": "purchase_limit_global",
+      "value": "500",
+      "type": "number",
+      "description": "Purchase attempts the whole site accepts in an hour. A ceiling for an attack spread across many accounts and addresses — raise it before a launch or a sale"
+    },
+    {
+      "name": "failed_payment_limit",
+      "value": "3",
+      "type": "number",
+      "description": "Declined payments one user, or one IP address, may have before further purchase attempts are refused for the cool-down"
+    },
+    {
+      "name": "failed_payment_cooldown_minutes",
+      "value": "60",
+      "type": "number",
+      "description": "How long purchases stay refused after too many declines, and how far back declines are counted"
+    },
+    {
+      "name": "trust_proxy",
+      "value": "false",
+      "type": "boolean",
+      "description": "Take the buyer's IP address from the X-Forwarded-For header. Turn on only when the site is behind a proxy you run (nginx, a load balancer, Cloudflare) — otherwise anyone can claim any address"
+    }
+  ],
+  "groups": [
+    {
+      "name": "kempo-credits:support",
+      "description": "Looks up any user's balance and history and gives promo credits as goodwill, without being able to take credits away or change prices",
+      "permissions": [
+        "system:admin:access",
+        "credits:view",
+        "credits:grant"
+      ]
+    },
+    {
+      "name": "kempo-credits:administrator",
+      "description": "Everything: balances, grants and adjustments, packs and prices, claim links and the settings",
+      "permissions": [
+        "system:admin:access",
+        "credits:view",
+        "credits:grant",
+        "credits:adjust",
+        "credits:packs",
+        "credits:settings"
+      ]
+    }
   ]
 }

@@ -26,7 +26,24 @@ jobs:
     permissions:
       contents: write
       id-token: write
+    services:
+      # The release gate runs both tiers. Without a database the integration tier fails rather than
+      # skipping, so this is what lets it run at all.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: kempo
+          POSTGRES_PASSWORD: kempo
+          POSTGRES_DB: kempo_credits_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
+      DATABASE_URL: postgresql://kempo:kempo@localhost:5432/kempo_credits_test
       # Quoted: unquoted, YAML reads 64 zeros as the number 0 and the key is invalid.
       SETTINGS_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
     steps:
@@ -55,8 +72,17 @@ jobs:
       - name: Install the host for the test gate
         run: npm install --no-save --no-legacy-peer-deps --force kempo@latest kempo-ui@latest kempo-server@latest
 
-      - name: Run tests
+      - name: Install Chromium for the browser suite
+        run: npx playwright install --with-deps chromium
+
+      - name: Apply database schema
+        run: npx drizzle-kit push --force
+
+      - name: Run unit tests
         run: npm test
+
+      - name: Run integration tests
+        run: npm run test:integration
 
       - name: Set version type
         id: version

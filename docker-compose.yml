@@ -1,0 +1,22 @@
+# Database for kempo-credits' integration tier. The other kempo repos have claimed 5433-5440 and
+# 5442-5446, so this one takes 5447 — they can all be up at once.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: kempo-credits-test-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kempo
+      POSTGRES_PASSWORD: kempo
+      POSTGRES_DB: kempo_credits_test
+    ports:
+      - "5447:5432"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kempo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+volumes:
+  postgres_test_data:

@@ -1,38 +1,59 @@
 {
   "name": "kempo-credits",
   "version": "0.0.2",
-  "description": "An in-app currency for kempo — a credits ledger with paid and promotional balances, packs and promo links (planned; see PLAN.md)",
+  "description": "An in-app currency for kempo — a credits ledger with paid and promotional balances, credit packs bought through kempo-payments, and promo claim links",
   "license": "MIT",
   "author": "Dustin Poissant",
   "type": "module",
+  "main": "sdk.js",
   "scripts": {
-    "test": "node scripts/run-tests.js kempo-test -l minimal",
-    "link:local": "npm install ../kempo ../kempo-server ../kempo-ui ../kempo-payments --no-save --no-legacy-peer-deps --force"
+    "test": "node scripts/run-tests.js unit kempo-test -l minimal",
+    "test:integration": "node scripts/run-tests.js integration kempo-test -l minimal -t 120000",
+    "link:local": "npm install ../kempo ../kempo-server ../kempo-ui ../kempo-payments ../kempo-tax --no-save --no-legacy-peer-deps --force"
+  },
+  "exports": {
+    "./install": "./install.js",
+    "./update": "./update.js",
+    "./uninstall": "./uninstall.js",
+    "./sdk": "./sdk.js"
   },
   "files": [
     "admin",
+    "hooks",
     "public",
     "server",
     "install.js",
     "update.js",
+    "uninstall.js",
     "sdk.js",
-    "kempo-config.json",
-    "PLAN.md"
+    "kempo-config.json"
   ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dustinpoissant/kempo-credits.git"
   },
+  "dependencies": {
+    "drizzle-orm": "^0.45.2"
+  },
   "peerDependencies": {
     "kempo": ">=4.5.8",
+    "kempo-payments": ">=0.1.9",
     "kempo-server": ">=3.3.0",
-    "kempo-ui": ">=0.4.53",
-    "kempo-payments": ">=0.1.9"
+    "kempo-tax": ">=0.2.2",
+    "kempo-ui": ">=0.4.53"
+  },
+  "peerDependenciesMeta": {
+    "kempo-tax": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.9",
-    "drizzle-orm": "^0.45.2",
+    "drizzle-kit": "^0.31.10",
+    "kempo-payments": "^0.1.9",
+    "kempo-tax": "^0.2.2",
     "kempo-testing-framework": "^1.4.11",
+    "playwright": "^1.64.0",
     "postgres": "^3.4.9"
   },
   "allowScripts": {

@@ -1,7 +1,7 @@
 # kempo-credits — PLAN
 
-> Status: **planned, nothing built.** This file is the brief. An agent picking this up should build
-> exactly what it describes, and raise anything it disagrees with here rather than improvising.
+> Status: **built** (2026-10-14). README.md documents what exists; CHANGELOG.md lists the decisions
+> taken where this brief left a question open. The brief below is kept as it was written.
 
 > **Upstream changes are allowed.** Every dependency with `kempo` in its name (kempo, kempo-ui,
 > kempo-css, kempo-server, kempo-payments, kempo-media, and the rest) is owned by the same person, and

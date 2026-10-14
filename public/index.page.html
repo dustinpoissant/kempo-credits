@@ -1,0 +1,37 @@
+<!--
+locked: true
+template: default
+-->
+<page title="Credits">
+<content>
+  <script type="module" src="/kempo-ui/components/Icon.js"></script>
+  <script type="module" src="/credits/components/Balance.js"></script>
+  <script type="module" src="/credits/components/BuyCredits.js"></script>
+  <script type="module" src="/credits/components/History.js"></script>
+
+  <h1 class="mb">Credits</h1>
+
+  <div class="row">
+    <div class="span-4 t-span-12 m-span-12 pr">
+      <k-cred-balance id="balance"></k-cred-balance>
+    </div>
+  </div>
+
+  <h2>Buy credits</h2>
+  <k-cred-buy id="buy"></k-cred-buy>
+
+  <h2 class="mt">History</h2>
+  <k-cred-history id="history"></k-cred-history>
+
+  <script type="module">
+    /*
+      A purchase or a claim changes the balance and the history, so both are re-read when one
+      finishes. Methods, not events, cause the refresh; the event only says it happened.
+    */
+    document.getElementById('buy').addEventListener('credits-purchased', () => {
+      document.getElementById('balance').refresh();
+      document.getElementById('history').refresh();
+    });
+  </script>
+</content>
+</page>
