@@ -4,9 +4,7 @@ import { fileURLToPath } from 'url';
 import { eq, like } from 'drizzle-orm';
 import { createHook, setSetting, deleteSetting, clearHandlerCache } from 'kempo/server/sdk.js';
 import { hook, setting } from 'kempo/server/db/schema.js';
-import {
-  kempoCreditClaim, kempoCreditClaimRedemption, kempoCreditEntry, kempoCreditLot, kempoCreditPack, kempoCreditPurchase,
-} from '../../server/db/schema.js';
+import { kempoCreditEntry, kempoCreditLot } from '../../server/db/schema.js';
 import { auditAccount, getBalance } from '../../server/utils/ledger/read.js';
 import { db } from './db.js';
 
@@ -29,10 +27,6 @@ export const purge = async () => {
   await db.delete(setting).where(like(setting.name, 'kempo-credits:%'));
   await db.delete(kempoCreditEntry);
   await db.delete(kempoCreditLot);
-  await db.delete(kempoCreditClaimRedemption);
-  await db.delete(kempoCreditClaim);
-  await db.delete(kempoCreditPurchase);
-  await db.delete(kempoCreditPack);
 };
 
 /*
@@ -51,7 +45,8 @@ export const invariant = async userId => {
   const lots = await db.select().from(kempoCreditLot).where(eq(kempoCreditLot.userId, userId));
   const sum = lots.reduce((total, lot) => total + lot.remaining, 0);
   if(balance.total !== sum) return `balance says ${balance.total} but the lots add up to ${sum}`;
-  if(balance.paid + balance.promo !== balance.total) return `paid ${balance.paid} + promo ${balance.promo} is not the total ${balance.total}`;
+  const byKind = Object.values(balance.byKind).reduce((total, amount) => total + amount, 0);
+  if(byKind !== balance.total) return `the kinds add up to ${byKind} but the total is ${balance.total}`;
 
   return null;
 };
@@ -60,7 +55,7 @@ export const invariant = async userId => {
   Hooks. A fixture module per event appends what it was given to a list on globalThis, and the hook
   rows point at those modules by absolute path, which triggerHook imports as-is.
 */
-export const HOOK_EVENTS = ['credits:granted', 'credits:spent', 'credits:reversed', 'credits:clawed-back', 'credits:low'];
+export const HOOK_EVENTS = ['credits:granted', 'credits:spent', 'credits:reversed', 'credits:transferred', 'credits:clawed-back', 'credits:low'];
 
 export const listenToHooks = async () => {
   await db.delete(hook).where(like(hook.owner, 'kempo-credits-test%'));

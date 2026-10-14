@@ -16,15 +16,14 @@ import { cleanAmount, cleanKey, cleanReference, cleanText } from './validate.js'
   // or { lotId }, and optionally `amount` to take back only part of it
   ```
 
-  The credits come from the grant's own lot first and then from the user's other credits, promo
-  before paid. A refund through this site never needs more than that: it is refused unless the user
-  still holds enough credits to cover it (see server/utils/purchases/refund.js), because spent credits
-  are never refunded as money. If something was spent on a thing the user never received, an
-  administrator gives those credits back first — by reversing the spend, or simply granting them —
-  and the purchase is then refundable.
+  The credits come from the grant's own lot first and then from the user's other credits, oldest
+  first. A refund an extension makes through its own screens should never need more than the user
+  still holds — kempo-credit-packs refuses one that would, using `getGrant` below, because spent
+  credits are never refunded as money; if something was spent on a thing the user never received, an
+  administrator gives those credits back first, by reversing the spend or granting them.
 
-  A refund made somewhere this site cannot stop — the processor's own dashboard, or a chargeback —
-  can still take back more than the user holds. What could not be taken is the **shortfall**: a
+  A refund made somewhere that extension cannot stop — the processor's own dashboard, or a
+  chargeback — can still take back more than the user holds. What could not be taken is the **shortfall**: a
   `shortfall` entry takes the lot below zero, so the balance shows what is owed; spending is blocked
   until credits granted later have paid it off or an administrator writes it off; and every person
   who can see credits is notified.
@@ -51,6 +50,27 @@ export const grantState = async (handle, lot) => {
   const clawed = sumOf(taken);
   const gone = sumOf(removed);
   return { clawed, removed: gone, claimable: Math.max(0, lot.amount - clawed - gone) };
+};
+
+/*
+  A grant and where it stands: `{ lot, clawed, removed, claimable }` — how many of its credits have
+  been taken back for it (wherever they were taken from), how many an administrator removed from it,
+  and so how many can still be taken back. This is what an extension that sells or awards credits
+  needs to decide how far a refund may go.
+*/
+export const getGrant = async ({ lotId, reference } = {}) => {
+  const [cleanError, cleanRef] = cleanReference(lotId ? null : reference);
+  if(cleanError) return [cleanError, null];
+  if(!lotId && !cleanRef) return [{ code: 400, msg: 'Say which grant: a lotId or its reference' }, null];
+
+  const [error, lot] = await findLot({ lotId, reference: cleanRef });
+  if(error) return [error, null];
+
+  try {
+    return [null, { lot, ...await grantState(db, lot) }];
+  } catch {
+    return [{ code: 500, msg: 'Could not load the grant' }, null];
+  }
 };
 
 export const findLot = async ({ lotId, reference }) => {
@@ -173,7 +193,7 @@ export const clawBackGrant = async ({ lotId, reference, amount, reason = 'clawba
     if(clawed.shortfall){
       await notifyAdmins({
         title: 'A user owes credits after a refund',
-        message: `A refund took back ${clawed.clawedBack} credits but the user held only ${clawed.taken}, so they now owe ${clawed.owed} and cannot spend until that is covered or written off. A refund made through this site is never allowed to do this — check whether it was made in the processor's dashboard, or was a chargeback.`,
+        message: `${clawed.clawedBack} credits were taken back but the user held only ${clawed.taken}, so they now owe ${clawed.owed} and cannot spend until that is covered or written off. Check whether this was a refund made outside the site, or a chargeback.`,
         dedupeKey: `shortfall:${userId}`,
         url: `/admin/extension/kempo-credits/?user=${encodeURIComponent(userId)}`,
       });

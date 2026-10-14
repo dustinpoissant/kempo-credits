@@ -7,25 +7,20 @@ locked: true
   <script type="module" src="/kempo-ui/components/Tabs.js"></script>
   <script type="module" src="/admin/extension/kempo-credits/components/Balances.js"></script>
   <script type="module" src="/admin/extension/kempo-credits/components/Grant.js"></script>
-  <script type="module" src="/admin/extension/kempo-credits/components/Purchases.js"></script>
-  <script type="module" src="/admin/extension/kempo-credits/components/Packs.js"></script>
-  <script type="module" src="/admin/extension/kempo-credits/components/Claims.js"></script>
   <script type="module" src="/admin/extension/kempo-credits/components/Settings.js"></script>
 
   <div>
     <h1>Credits</h1>
     <p class="tc-muted">
-      The site's in-app currency. Users buy credits in packs, are given them as promotions, and spend them on
-      whatever the site sells for credits. Every change to a balance is a ledger entry, so any balance can be
-      traced back to how it came to be. Bought credits have no cash value and are never paid out.
+      The site's in-app currency. Other extensions and your own code grant credits and spend them through
+      the SDK; this keeps each user's balance and the history that explains it, so any balance can be
+      traced back to how it came to be. Selling credits and handing them out through links are separate
+      extensions.
     </p>
 
     <k-tabs id="tabs" active="balances" persistent-id="kempo-credits-admin-tab">
       <k-tab id="balancesTab" for="balances">Balances</k-tab>
       <k-tab id="grantTab" for="grant">Give credits</k-tab>
-      <k-tab id="purchasesTab" for="purchases">Purchases</k-tab>
-      <k-tab id="packsTab" for="packs">Packs</k-tab>
-      <k-tab id="claimsTab" for="claims">Claim links</k-tab>
       <k-tab id="settingsTab" for="settings">Settings</k-tab>
 
       <k-tab-content id="balancesContent" name="balances">
@@ -34,18 +29,6 @@ locked: true
 
       <k-tab-content id="grantContent" name="grant">
         <k-cred-grant></k-cred-grant>
-      </k-tab-content>
-
-      <k-tab-content id="purchasesContent" name="purchases">
-        <k-cred-purchases id="purchases"></k-cred-purchases>
-      </k-tab-content>
-
-      <k-tab-content id="packsContent" name="packs">
-        <k-cred-packs></k-cred-packs>
-      </k-tab-content>
-
-      <k-tab-content id="claimsContent" name="claims">
-        <k-cred-claims></k-cred-claims>
       </k-tab-content>
 
       <k-tab-content id="settingsContent" name="settings">
@@ -60,9 +43,6 @@ locked: true
     -->
     <k-permission-target has="credits:view" target="#balancesTab, #balancesContent"></k-permission-target>
     <k-permission-target has="credits:grant" target="#grantTab, #grantContent"></k-permission-target>
-    <k-permission-target has="credits:view" target="#purchasesTab, #purchasesContent"></k-permission-target>
-    <k-permission-target has="credits:packs" target="#packsTab, #packsContent"></k-permission-target>
-    <k-permission-target has="credits:grant" target="#claimsTab, #claimsContent"></k-permission-target>
     <k-permission-target has="credits:settings" target="#settingsTab, #settingsContent"></k-permission-target>
   </div>
 
@@ -78,22 +58,17 @@ locked: true
     const visibility = {
       balances: permissions.has('credits:view'),
       grant: permissions.has('credits:grant'),
-      purchases: permissions.has('credits:view'),
-      packs: permissions.has('credits:packs'),
-      claims: permissions.has('credits:grant'),
       settings: permissions.has('credits:settings'),
     };
 
     /*
-      Notifications link here with ?user= (one user's ledger), or ?tab=purchases with &purchase= or
-      &status=blocked. Those win over whichever tab was open last time.
+      Notifications link here with ?user= (one user's ledger), which wins over whichever tab was open
+      last time.
     */
     const params = new URLSearchParams(location.search);
     const wanted = params.get('user') ? 'balances' : params.get('tab');
 
     if(params.get('user')) document.getElementById('balances').userId = params.get('user');
-    if(params.get('purchase')) document.getElementById('purchases').purchaseId = params.get('purchase');
-    if(params.get('status')) document.getElementById('purchases').status = params.get('status');
 
     if(tabs){
       if(wanted && visibility[wanted]) tabs.active = wanted;

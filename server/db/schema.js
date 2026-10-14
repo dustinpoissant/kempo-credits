@@ -1,7 +1,9 @@
-import { pgTable, text, boolean, integer, jsonb, timestamp, uniqueIndex, index } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, timestamp, uniqueIndex, index } from 'drizzle-orm/pg-core';
 
 /*
-  Six tables. Two of them are the ledger, and the other four are the ways credits come into it.
+  Two tables, and nothing else: the ledger and the lots it moves credits between. How credits come to
+  exist — bought, earned, claimed, awarded — is the business of whatever calls `grantCredits`, and
+  none of it is stored here.
 
   Credits are integers and money is an integer in the currency's minor unit, as in kempo-payments.
   There is no float anywhere in this file, and nothing that reads from it should produce one.
@@ -21,9 +23,9 @@ import { pgTable, text, boolean, integer, jsonb, timestamp, uniqueIndex, index }
   **Credits never expire**, paid or promo — the site owner's rule. There is deliberately no expiry
   column, so there is nothing for any code path to set.
 
-  `kind` is `paid` or `promo`, and the two are kept apart because they are different things. Paid
-  credits were bought; they are a prepaid balance, and what a refund of the purchase takes back.
-  Promo credits were given away; they are not revenue and are never refunded as money.
+  `kind` is a label the granting code chooses (`general` by default). The ledger keeps lots of
+  different kinds apart and reports a balance per kind, but does not interpret them; the one thing
+  the site does with a kind is the `non_transferable_kinds` setting.
 
   `remaining` can go below zero, and that is the one way a balance can: a refund that bypassed the
   site's own check (made in the processor's dashboard, or a chargeback) taking back more than the
@@ -83,6 +85,8 @@ export const kempoCreditLot = pgTable('kempoCreditLot', {
   | `shortfall`   | -    | what a refund could not take back: the lot goes below zero            |
   | `settlement`  | ±    | credits moved from a positive lot to pay off a negative one           |
   | `removal`     | -    | an administrator taking credits away                                  |
+  | `transfer_out`| -    | credits sent to another user, drawn from the sender's lots            |
+  | `transfer_in` | +    | credits received: the lot being created, on the recipient's side      |
   | `forgiveness` | +    | an administrator writing off what a user owes                         |
 
   `reversesOperationId` points a reversal at the spend it undoes, and a claw back at the grant it
@@ -108,6 +112,9 @@ export const kempoCreditEntry = pgTable('kempoCreditEntry', {
   idempotencyKey: text('idempotencyKey'),
   reversesOperationId: text('reversesOperationId'),
 
+  // The other user in a transfer: who the credits went to, or came from.
+  counterpartyId: text('counterpartyId'),
+
   // The person who did it, where a person did. Null for the system acting on its own — a webhook.
   actorId: text('actorId'),
   note: text('note'),
@@ -119,131 +126,4 @@ export const kempoCreditEntry = pgTable('kempoCreditEntry', {
   lotIndex: index('kempoCreditEntry_lot_idx').on(table.lotId),
   operationIndex: index('kempoCreditEntry_operation_idx').on(table.operationId),
   referenceIndex: index('kempoCreditEntry_reference_idx').on(table.referenceOwner, table.referenceId),
-}));
-
-/*
-  Something a user can buy: this many credits for this much money, as an administrator set it.
-
-  The price is the only one a purchase ever charges. A browser names a pack, never an amount.
-*/
-export const kempoCreditPack = pgTable('kempoCreditPack', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  description: text('description'),
-
-  credits: integer('credits').notNull(),
-  price: integer('price').notNull(),
-  currency: text('currency').notNull(),
-
-  enabled: boolean('enabled').notNull().default(true),
-  sort: integer('sort').notNull().default(0),
-
-  createdAt: timestamp('createdAt').notNull(),
-  updatedAt: timestamp('updatedAt').notNull(),
-});
-
-/*
-  One attempt to buy a pack, from the moment it is priced to the moment it is paid, refunded or
-  given up on. It ties together the pack as it was then, the payment, the tax quote and, once paid,
-  the lot that was granted.
-
-  It is also the abuse log. An attempt refused by a rate limit or a decline cool-down is written
-  here with `status: 'blocked'` and the reason, and never reaches the payment processor — so an
-  administrator sees an attack in this table before it shows up on the processor's bill. The same
-  rows are what the limits count, which is why `ip` is kept.
-
-  `shown` is what the buyer was shown before paying: the pack, the price, the tax, the total and the
-  refund policy, exactly as rendered. A dispute is answered with it.
-*/
-export const kempoCreditPurchase = pgTable('kempoCreditPurchase', {
-  id: text('id').primaryKey(),
-  userId: text('userId').notNull(),
-  status: text('status').notNull(),
-
-  packId: text('packId'),
-  packName: text('packName'),
-  credits: integer('credits').notNull().default(0),
-
-  currency: text('currency'),
-  subtotal: integer('subtotal').notNull().default(0),
-  tax: integer('tax').notNull().default(0),
-  total: integer('total').notNull().default(0),
-  includesTax: boolean('includesTax').notNull().default(false),
-
-  paymentId: text('paymentId'),
-  lotId: text('lotId'),
-
-  taxCalculationId: text('taxCalculationId'),
-  taxTransactionId: text('taxTransactionId'),
-  taxError: text('taxError'),
-
-  failures: integer('failures').notNull().default(0),
-  lastFailedAt: timestamp('lastFailedAt'),
-  lastError: text('lastError'),
-  blockedReason: text('blockedReason'),
-
-  refundedAmount: integer('refundedAmount').notNull().default(0),
-  creditsClawedBack: integer('creditsClawedBack').notNull().default(0),
-  shortfall: integer('shortfall').notNull().default(0),
-  disputed: boolean('disputed').notNull().default(false),
-
-  ip: text('ip'),
-  userAgent: text('userAgent'),
-  shown: jsonb('shown'),
-
-  checkedAt: timestamp('checkedAt'),
-  paidAt: timestamp('paidAt'),
-  refundedAt: timestamp('refundedAt'),
-  createdAt: timestamp('createdAt').notNull(),
-  updatedAt: timestamp('updatedAt').notNull(),
-}, table => ({
-  userIndex: index('kempoCreditPurchase_user_idx').on(table.userId, table.createdAt),
-  ipIndex: index('kempoCreditPurchase_ip_idx').on(table.ip, table.createdAt),
-  createdIndex: index('kempoCreditPurchase_created_idx').on(table.createdAt),
-  statusIndex: index('kempoCreditPurchase_status_idx').on(table.status),
-  paymentIndex: index('kempoCreditPurchase_payment_idx').on(table.paymentId),
-}));
-
-/*
-  A link that grants promo credits to whoever redeems it.
-
-  Only a hash of the token is kept. The link is shown once, when it is made — a database backup
-  that leaks must not be a way to mint credits. `tokenHint` is the last few characters, so an
-  administrator can tell two links apart.
-
-  `expiresAt` is when the *link* stops working. The credits it has already granted never expire.
-*/
-export const kempoCreditClaim = pgTable('kempoCreditClaim', {
-  id: text('id').primaryKey(),
-  tokenHash: text('tokenHash').notNull(),
-  tokenHint: text('tokenHint'),
-  name: text('name'),
-
-  amount: integer('amount').notNull(),
-
-  expiresAt: timestamp('expiresAt'),
-  maxRedemptions: integer('maxRedemptions'),
-  redemptions: integer('redemptions').notNull().default(0),
-  enabled: boolean('enabled').notNull().default(true),
-
-  createdBy: text('createdBy'),
-  createdAt: timestamp('createdAt').notNull(),
-  updatedAt: timestamp('updatedAt').notNull(),
-}, table => ({
-  tokenIndex: uniqueIndex('kempoCreditClaim_token_idx').on(table.tokenHash),
-}));
-
-/*
-  Who redeemed which link. The primary key is `claimId:userId` rather than a generated id, so "one
-  redemption per person per link" rests on the one constraint kempo's installer is guaranteed to
-  create, not on an index that might not exist.
-*/
-export const kempoCreditClaimRedemption = pgTable('kempoCreditClaimRedemption', {
-  id: text('id').primaryKey(),
-  claimId: text('claimId').notNull(),
-  userId: text('userId').notNull(),
-  lotId: text('lotId').notNull(),
-  createdAt: timestamp('createdAt').notNull(),
-}, table => ({
-  claimIndex: index('kempoCreditClaimRedemption_claim_idx').on(table.claimId),
 }));

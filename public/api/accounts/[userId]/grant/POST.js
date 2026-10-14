@@ -2,10 +2,9 @@ import grantCredits from '../../../../../server/utils/ledger/grant.js';
 import { gate, refuse, wholeNumber } from '../../../../../server/http/gate.js';
 
 /*
-  An administrator giving a user promo credits — a goodwill gesture, a prize, a correction in their
-  favour. Always promo: bought credits only ever come from a purchase. The note is required and is
-  what the ledger shows next to the grant forever after; who granted it is the signed-in user, never
-  anything in the body.
+  An administrator giving a user credits — a goodwill gesture, a prize, a correction in their favour.
+  The note is required and is what the ledger shows next to the grant forever after; who granted it
+  is the signed-in user, never anything in the body.
 
   `idempotencyKey` is the form's own id for this submission, so a double click or a retried request
   grants once.
@@ -20,10 +19,8 @@ export default async (request, response) => {
   const [error, result] = await grantCredits({
     userId: request.params?.userId,
     amount: wholeNumber(body.amount),
-    kind: 'promo',
-    expiresAt: body.expiresAt || undefined,
-    expiresInDays: wholeNumber(body.expiresInDays),
-    reason: 'promo',
+    kind: body.kind || undefined,
+    reason: 'admin-grant',
     idempotencyKey: body.idempotencyKey,
     actorId: session.user.id,
     note: body.note,

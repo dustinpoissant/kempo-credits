@@ -11,8 +11,8 @@ import { formatCredits, formatDateTime } from '/credits/utils/format.js';
 
   Search finds anybody by name, email or id — including people who have never had a credit, because
   "find this person" is the question that brings somebody here. With no search the list is the users
-  who have a ledger, most recently active first. "Owing" narrows to users whose refunded purchases
-  had already been spent: the ones that need a decision.
+  who have a ledger, most recently active first. "Owing" narrows to users a refund took more credits
+  from than they held: the ones that need a decision.
 
   `user-id` opens straight onto one user, which is how a notification links here.
 */
@@ -111,14 +111,9 @@ export default class Balances extends ShadowComponent {
     return html`
       <div class="d-f tiles">
         <div class="card tile">
-          <span class="tc-muted">Bought, not yet spent</span>
-          <span class="value">${formatCredits(credits.paid)}</span>
-          <span class="tc-muted">A prepaid balance the site still owes</span>
-        </div>
-        <div class="card tile">
-          <span class="tc-muted">Promo, not yet spent</span>
-          <span class="value">${formatCredits(credits.promo)}</span>
-          <span class="tc-muted">Held by ${credits.holders} user${credits.holders === 1 ? '' : 's'} in all</span>
+          <span class="tc-muted">Credits held</span>
+          <span class="value">${formatCredits(credits.total)}</span>
+          <span class="tc-muted">By ${credits.holders} user${credits.holders === 1 ? '' : 's'}</span>
         </div>
         ${credits.owing ? html`
           <div class="card tile">
@@ -141,7 +136,7 @@ export default class Balances extends ShadowComponent {
       <div class="table-wrapper">
         <table>
           <thead>
-            <tr><th>User</th><th class="ta-right">Balance</th><th class="ta-right">Bought</th><th class="ta-right">Promo</th><th>Last change</th><th></th></tr>
+            <tr><th>User</th><th class="ta-right">Balance</th><th>Last change</th><th></th></tr>
           </thead>
           <tbody>
             ${this.accounts.map(account => html`
@@ -154,8 +149,6 @@ export default class Balances extends ShadowComponent {
                   ${formatCredits(account.total)}
                   ${account.owed ? html`<span class="d-b">owes ${formatCredits(account.owed)}</span>` : nothing}
                 </td>
-                <td class="ta-right">${formatCredits(account.paid)}</td>
-                <td class="ta-right">${formatCredits(account.promo)}</td>
                 <td class="tc-muted">${account.lastActivity ? formatDateTime(account.lastActivity) : 'Never'}</td>
                 <td><button class="link">Open</button></td>
               </tr>

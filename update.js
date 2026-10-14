@@ -3,15 +3,19 @@ import { createIndexes } from './server/db/indexes.js';
 
 /*
   Updating makes sure the indexes exist — every statement is `IF NOT EXISTS`, so this is safe from
-  any version to any other — and retires settings that no longer mean anything. It does not give
-  `credits:purchase` to `system:Users` again: a site that took it away meant to.
+  any version to any other — and retires settings that no longer belong here.
 
-  New settings, permissions and groups are added by kempo's own declarative diff, and existing values
-  are never overwritten. That diff never removes one, though, so the expiry settings — from before
-  credits were made never-expiring — are deleted here rather than left on /admin/settings promising
-  something that cannot happen.
+  kempo's declarative diff adds new settings, permissions and groups and never overwrites a value,
+  but it never removes one either. Selling credits and claim links moved out to kempo-credit-packs
+  and kempo-credit-claims, and credits were made never-expiring, so the settings those used are
+  deleted here rather than left on /admin/settings promising something this extension no longer does.
 */
-const RETIRED = ['expiring_soon_days', 'paid_credits_expire', 'paid_credits_expiry_days'];
+const RETIRED = [
+  'expiring_soon_days', 'paid_credits_expire', 'paid_credits_expiry_days',
+  'refund_policy', 'tax_class', 'trust_proxy',
+  'purchase_limit_per_user', 'purchase_limit_per_ip', 'purchase_limit_global',
+  'failed_payment_limit', 'failed_payment_cooldown_minutes',
+];
 
 export default async () => {
   await createIndexes();

@@ -6,7 +6,6 @@ template: default
 <content>
   <script type="module" src="/kempo-ui/components/Icon.js"></script>
   <script type="module" src="/credits/components/Balance.js"></script>
-  <script type="module" src="/credits/components/BuyCredits.js"></script>
   <script type="module" src="/credits/components/History.js"></script>
 
   <h1 class="mb">Credits</h1>
@@ -17,21 +16,37 @@ template: default
     </div>
   </div>
 
-  <h2>Buy credits</h2>
-  <k-cred-buy id="buy"></k-cred-buy>
+  <div id="send-section" hidden>
+    <h2>Send credits</h2>
+    <div class="row">
+      <div class="span-4 t-span-12 m-span-12 pr">
+        <k-cred-send id="send"></k-cred-send>
+      </div>
+    </div>
+  </div>
 
   <h2 class="mt">History</h2>
   <k-cred-history id="history"></k-cred-history>
 
   <script type="module">
+    import { getAllCurrentUserPermissions } from '/kempo/sdk.js';
+
     /*
-      A purchase or a claim changes the balance and the history, so both are re-read when one
-      finishes. Methods, not events, cause the refresh; the event only says it happened.
+      The send form is only offered to somebody who can use it. That is a courtesy: the route checks
+      `credits:transfer` again and is the boundary that matters.
     */
-    document.getElementById('buy').addEventListener('credits-purchased', () => {
-      document.getElementById('balance').refresh();
-      document.getElementById('history').refresh();
-    });
+    const [, data] = await getAllCurrentUserPermissions();
+    if((data?.permissions || []).includes('credits:transfer')){
+      await import('/credits/components/SendCredits.js');
+      document.getElementById('send-section').hidden = false;
+
+      // Sending changes the balance and the history, so both are re-read. A method causes the
+      // refresh; the event only says it happened.
+      document.getElementById('send').addEventListener('credits-sent', () => {
+        document.getElementById('balance').refresh();
+        document.getElementById('history').refresh();
+      });
+    }
   </script>
 </content>
 </page>

@@ -9,14 +9,18 @@ import { cleanUserId, hasNulByte } from './validate.js';
   Reading the ledger. Nothing here writes.
 */
 
+// The entry types that open a lot: a grant, or credits arriving in a transfer.
+const OPENING = ['grant', 'transfer_in'];
+
 const page = (limit, offset, max = 200) => ({
   take: Math.min(max, Math.max(1, Number(limit) || 50)),
   skip: Math.max(0, Number(offset) || 0),
 });
 
 /*
-  `{ total, paid, promo, owed }`. `total` is what can be spent, and is below zero only when the user
-  owes credits from a refund that took back more than they held — `owed` says how many.
+  `{ total, owed, byKind }`. `total` is what can be spent, and is below zero only when the user owes
+  credits from a refund that took back more than they held — `owed` says how many. `byKind` is the
+  balance of each kind of credit the user has any of, `{ general: 400, purchase: 100 }`.
 */
 export const getBalance = async ({ userId } = {}) => {
   const [userError, id] = cleanUserId(userId);
@@ -113,7 +117,9 @@ export const getOperation = async ({ operationId } = {}) => {
       userId: entries[0].userId,
       type: entries[0].type,
       idempotencyKey: key,
-      amount: entries.reduce((sum, entry) => sum + entry.amount, 0),
+      // What the operation did to the user it is filed under. A transfer is in two users' ledgers.
+      amount: entries.filter(entry => entry.userId === entries[0].userId).reduce((sum, entry) => sum + entry.amount, 0),
+      counterpartyId: entries[0].counterpartyId || null,
       reversedBy: reversal?.operationId || null,
       entries,
     }];
@@ -135,8 +141,6 @@ export const listAccounts = async ({ search, owing = false, limit = 25, offset =
   const totals = db.select({
     userId: kempoCreditLot.userId,
     total: sql`coalesce(sum(${kempoCreditLot.remaining}), 0)::bigint`.as('total'),
-    paid: sql`coalesce(sum(${kempoCreditLot.remaining}) filter (where ${kempoCreditLot.kind} = 'paid'), 0)::bigint`.as('paid'),
-    promo: sql`coalesce(sum(${kempoCreditLot.remaining}) filter (where ${kempoCreditLot.kind} = 'promo'), 0)::bigint`.as('promo'),
     owed: sql`coalesce(-sum(${kempoCreditLot.remaining}) filter (where ${kempoCreditLot.remaining} < 0), 0)::bigint`.as('owed'),
     lastActivity: sql`max(${kempoCreditLot.updatedAt})`.mapWith(kempoCreditLot.updatedAt).as('lastActivity'),
   }).from(kempoCreditLot).groupBy(kempoCreditLot.userId).as('totals');
@@ -146,8 +150,6 @@ export const listAccounts = async ({ search, owing = false, limit = 25, offset =
     name: user.name,
     email: user.email,
     total: totals.total,
-    paid: totals.paid,
-    promo: totals.promo,
     owed: totals.owed,
     lastActivity: totals.lastActivity,
   };
@@ -178,8 +180,6 @@ export const listAccounts = async ({ search, owing = false, limit = 25, offset =
         name: row.name || null,
         email: row.email || null,
         total: Number(row.total || 0),
-        paid: Number(row.paid || 0),
-        promo: Number(row.promo || 0),
         owed: Number(row.owed || 0),
         lastActivity: row.lastActivity || null,
       })),
@@ -194,9 +194,8 @@ export const listAccounts = async ({ search, owing = false, limit = 25, offset =
 };
 
 /*
-  Credits across the whole site: how many users hold some, how many paid and promo credits are
-  outstanding, and how many users owe and how much. Outstanding paid credits are a liability — a
-  prepaid balance the site still has to honour — which is why they are reported apart.
+  Credits across the whole site: how many users hold some, how many credits are outstanding, and how
+  many users owe and how much.
 */
 export const creditTotals = async () => {
   const held = sql`${kempoCreditLot.remaining} > 0`;
@@ -204,16 +203,14 @@ export const creditTotals = async () => {
   try {
     const [row] = await db.select({
       holders: sql`count(distinct ${kempoCreditLot.userId}) filter (where ${held})::int`,
-      paid: sql`coalesce(sum(${kempoCreditLot.remaining}) filter (where ${held} and ${kempoCreditLot.kind} = 'paid'), 0)::bigint`,
-      promo: sql`coalesce(sum(${kempoCreditLot.remaining}) filter (where ${held} and ${kempoCreditLot.kind} = 'promo'), 0)::bigint`,
+      total: sql`coalesce(sum(${kempoCreditLot.remaining}) filter (where ${held}), 0)::bigint`,
       owing: sql`count(distinct ${kempoCreditLot.userId}) filter (where ${kempoCreditLot.remaining} < 0)::int`,
       owed: sql`coalesce(-sum(${kempoCreditLot.remaining}) filter (where ${kempoCreditLot.remaining} < 0), 0)::bigint`,
     }).from(kempoCreditLot);
 
     return [null, {
       holders: row?.holders ?? 0,
-      paid: Number(row?.paid || 0),
-      promo: Number(row?.promo || 0),
+      total: Number(row?.total || 0),
       owing: row?.owing ?? 0,
       owed: Number(row?.owed || 0),
     }];
@@ -245,13 +242,13 @@ export const auditAccount = async ({ userId } = {}) => {
         continue;
       }
       tally.sum += entry.amount;
-      if(entry.type === 'grant') tally.grants.push(entry);
+      if(OPENING.includes(entry.type)) tally.grants.push(entry);
     }
 
     for(const { lot, sum, grants } of byLot.values()){
       if(lot.remaining !== sum) problems.push(`lot ${lot.id} says ${lot.remaining} remain, but its entries add up to ${sum}`);
       if(grants.length !== 1 || grants[0].amount !== lot.amount){
-        problems.push(`lot ${lot.id} was granted ${lot.amount}, but its grant entries say ${grants.map(grant => grant.amount).join(', ') || 'nothing'}`);
+        problems.push(`lot ${lot.id} was opened with ${lot.amount}, but its opening entries say ${grants.map(grant => grant.amount).join(', ') || 'nothing'}`);
       }
     }
 

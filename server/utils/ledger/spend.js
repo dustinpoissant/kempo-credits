@@ -20,7 +20,8 @@ import { cleanAmount, cleanKey, cleanReference, cleanText, cleanUserId } from '.
   ```
 
   All or nothing: either every credit is taken or none is, and a balance never goes below zero.
-  A user who owes credits from a refunded purchase cannot spend at all until that is paid off.
+  A user who owes credits — a refund took back more than they held — cannot spend at all until that
+  is paid off.
 
   Spending twice under one key spends once and returns the first spend (`duplicate: true`), so a
   feature can retry freely. Keep the key — `reverseSpend` takes it to give the credits back.

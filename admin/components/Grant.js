@@ -7,10 +7,9 @@ import { listAccounts } from '/credits/sdk.js';
 import { formatCredits } from '/credits/utils/format.js';
 
 /*
-  Giving one person promo credits: find them, then the grant form, open, on their ledger — so whoever
+  Giving one person credits: find them, then the grant form, open, on their ledger — so whoever
   is giving can see what that person already has before deciding how much more.
 
-  Bought credits are never granted here. They only come from a purchase.
 */
 export default class Grant extends ShadowComponent {
   static properties = {
@@ -68,9 +67,8 @@ export default class Grant extends ShadowComponent {
 
     return html`
       <p class="tc-muted">
-        Promo credits are a gift: they are not revenue, they are never refunded as money, and they are spent
-        before bought credits. Like all credits they never expire. Every grant needs a reason, which the user's
-        ledger keeps.
+        Credits given here are a gift from the site. Like all credits they never expire. Every grant needs a
+        reason, which the user's ledger keeps.
       </p>
       <div class="d-f controls">
         <input type="search" placeholder="Find a user by name, email or id" .value=${this.search} @input=${this.typed} />

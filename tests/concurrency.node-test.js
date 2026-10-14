@@ -1,5 +1,6 @@
 import grantCredits from '../server/utils/ledger/grant.js';
 import spendCredits from '../server/utils/ledger/spend.js';
+import transferCredits from '../server/utils/ledger/transfer.js';
 import { clawBackGrant } from '../server/utils/ledger/clawback.js';
 import { getBalance, listEntries } from '../server/utils/ledger/read.js';
 import { integrationTier } from './helpers/db.js';
@@ -20,7 +21,7 @@ import { freshUser, invariant, key, purge } from './helpers/ledger.js';
 const REF = { owner: 'test', ref: 'race' };
 
 const grant = (userId, amount, extra = {}) => grantCredits({
-  userId, amount, kind: 'paid', reason: 'test', idempotencyKey: key(), ...extra,
+  userId, amount, reason: 'test', idempotencyKey: key(), ...extra,
 });
 
 const spend = (userId, amount, extra = {}) => spendCredits({
@@ -135,5 +136,77 @@ export default {
     const problem = await invariant(user);
     if(problem) return fail(problem);
     pass(`${spent} spent before the claw back`);
+  },
+
+  /*
+    Two transfers that each need the other user's lock. Locks are taken in sorted order precisely so
+    this cannot deadlock; a version that locked "sender first" would hang or abort here, on a real
+    database, some of the time — so it runs many rounds.
+  */
+  'A sending to B while B sends to A, many times over, never deadlocks and never loses a credit': async ({ pass, fail }) => {
+    const ROUNDS = 12;
+
+    for(let round = 0; round < ROUNDS; round++){
+      const [alice, bob] = [freshUser(), freshUser()];
+      await grant(alice, 100);
+      await grant(bob, 100);
+
+      const results = await Promise.all([
+        ...Array.from({ length: 4 }, () => transferCredits({ fromUserId: alice, toUserId: bob, amount: 10, reason: 'gift', idempotencyKey: key() })),
+        ...Array.from({ length: 4 }, () => transferCredits({ fromUserId: bob, toUserId: alice, amount: 10, reason: 'gift', idempotencyKey: key() })),
+      ]);
+
+      const failed = results.filter(([error]) => error);
+      if(failed.length) return fail(`round ${round}: ${failed[0][0].code} ${failed[0][0].msg}`);
+
+      const [, a] = await getBalance({ userId: alice });
+      const [, b] = await getBalance({ userId: bob });
+      if(a.total + b.total !== 200 || a.total !== 100) return fail(`round ${round}: alice ${a.total}, bob ${b.total}`);
+      for(const user of [alice, bob]){
+        const problem = await invariant(user);
+        if(problem) return fail(`round ${round}: ${problem}`);
+      }
+    }
+
+    pass(`${ROUNDS} rounds${integrationTier ? ' on a real Postgres' : ''}`);
+  },
+
+  'racing transfers of the same credits send them once': async ({ pass, fail }) => {
+    const [alice, bob, carol] = [freshUser(), freshUser(), freshUser()];
+    await grant(alice, 100);
+
+    const results = await Promise.all([
+      transferCredits({ fromUserId: alice, toUserId: bob, amount: 100, reason: 'gift', idempotencyKey: key() }),
+      transferCredits({ fromUserId: alice, toUserId: carol, amount: 100, reason: 'gift', idempotencyKey: key() }),
+      spend(alice, 100),
+    ]);
+
+    const succeeded = results.filter(([error]) => !error).length;
+    const short = results.filter(([error]) => error?.code === 402).length;
+    if(succeeded !== 1 || short !== 2) return fail(`${succeeded} succeeded and ${short} were refused`);
+
+    const totals = await Promise.all([alice, bob, carol].map(async user => (await getBalance({ userId: user }))[1].total));
+    if(totals.reduce((sum, total) => sum + total, 0) !== (results[2][0] ? 100 : 0) || totals[0] !== 0){
+      return fail(`balances ${totals.join(', ')} after ${succeeded} success`);
+    }
+    pass('');
+  },
+
+  'one transfer sent six times at once is sent once': async ({ pass, fail }) => {
+    const [alice, bob] = [freshUser(), freshUser()];
+    await grant(alice, 100);
+    const idempotencyKey = key();
+
+    const results = await Promise.all(Array.from({ length: 6 }, () => transferCredits({
+      fromUserId: alice, toUserId: bob, amount: 40, reason: 'gift', idempotencyKey,
+    })));
+    const errors = results.filter(([error]) => error);
+    if(errors.length) return fail(`${errors.length} failed: ${errors[0][0].msg}`);
+    if(results.filter(([, sent]) => !sent.duplicate).length !== 1) return fail('more than one was applied');
+    if(new Set(results.map(([, sent]) => sent.operationId)).size !== 1) return fail('they did not all report one operation');
+
+    const [, b] = await getBalance({ userId: bob });
+    if(b.total !== 40) return fail(`bob has ${b.total}`);
+    pass('');
   },
 };

@@ -19,11 +19,12 @@ export default async (request, response) => {
   });
   if(error) return refuse(response, error);
 
-  const actors = {};
-  for(const actorId of new Set(result.entries.map(entry => entry.actorId).filter(Boolean))){
-    const [, actor] = await getUserById(actorId);
-    actors[actorId] = actor ? { name: actor.name, email: actor.email } : null;
+  const people = {};
+  const ids = new Set(result.entries.flatMap(entry => [entry.actorId, entry.counterpartyId]).filter(Boolean));
+  for(const id of ids){
+    const [, person] = await getUserById(id);
+    people[id] = person ? { name: person.name, email: person.email } : null;
   }
 
-  response.json({ ...result, actors });
+  response.json({ ...result, actors: people, counterparties: people });
 };

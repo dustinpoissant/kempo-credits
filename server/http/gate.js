@@ -8,7 +8,7 @@ import { getSession, currentUserHasPermission } from 'kempo/server/sdk.js';
 
   - **Your own.** Everything under /credits/api/my/ is about the signed-in user and nobody else, so
     it needs a session and no permission — the user id comes from the session, never the request.
-  - **Administrative.** Every other route that reads or changes somebody's credits, or the shop,
+  - **Administrative.** Every other route that reads or changes somebody's credits
     needs its own `credits:*` permission.
   - **Public.** The packs on sale, what the checkout needs to render, and a claim link's preview.
 */
@@ -42,23 +42,6 @@ export const refuse = (response, { code, msg, ...details }) => {
   if(details.retryAfter) response.set('Retry-After', String(details.retryAfter));
   return response.status(code || 500).json({ error: msg, ...details });
 };
-
-/*
-  The buyer's address, for the per-address limits. Behind a proxy every request comes from the
-  proxy, which would put every buyer on the site under one limit — so with the `trust_proxy`
-  setting on, the first X-Forwarded-For hop is used instead. Off by default, because without a proxy
-  that header is whatever the client chose to send.
-*/
-export const clientIp = (request, trustProxy) => {
-  const socket = request._originalRequest?.socket || request.socket;
-  const remote = socket?.remoteAddress || null;
-  if(!trustProxy) return remote;
-
-  const forwarded = String(request.headers?.['x-forwarded-for'] || '').split(',')[0].trim();
-  return forwarded.slice(0, 64) || remote;
-};
-
-export const userAgent = request => String(request.headers?.['user-agent'] || '').slice(0, 300) || null;
 
 /*
   A whole number from a JSON body or a query string, or undefined when there is none. Anything that

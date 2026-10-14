@@ -13,6 +13,7 @@ import { OWNER } from '../config/settings.js';
 */
 export const EVENTS = [
   'credits:granted',     // { userId, operationId, lot, amount, kind, reason, reference, settled, balance }
+  'credits:transferred', // { fromUserId, toUserId, operationId, amount, reason, reference, settled, fromBalance, toBalance }
   'credits:spent',       // { userId, operationId, amount, reason, reference, entries, balance }
   'credits:reversed',    // { userId, operationId, reversedOperationId, amount, reference, balance }
   'credits:clawed-back', // { userId, operationId, lot, removed, shortfall, settled, owed, balance }

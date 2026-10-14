@@ -3,7 +3,7 @@ import { SETTING_NAMES } from './settings.js';
 
 /*
   What the settings screen may save, checked strictly. The normalisers in settings.js are forgiving
-  on purpose — a bad stored value falls back to the default rather than breaking the shop — but a
+  on purpose — a bad stored value falls back to the default rather than breaking the ledger — but a
   value somebody is typing in right now gets told what is wrong with it instead.
 */
 
@@ -16,30 +16,20 @@ const number = (label, min, max) => value => {
     : [{ code: 400, msg: `${label} must be a whole number from ${min} to ${max}` }, null];
 };
 
-const flag = label => value => {
-  if(value === true || value === 'true') return [null, true];
-  if(value === false || value === 'false') return [null, false];
-  return [{ code: 400, msg: `${label} is on or off` }, null];
-};
+const KIND = /^[a-z0-9][a-z0-9_-]{0,49}$/;
 
-const text = (label, max, { required = false } = {}) => value => {
+const kinds = label => value => {
   if(typeof value !== 'string') return [{ code: 400, msg: `${label} must be text` }, null];
-  if(required && !value.trim()) return [{ code: 400, msg: `${label} cannot be empty` }, null];
-  if(value.length > max) return [{ code: 400, msg: `${label} is at most ${max} characters` }, null];
   if(hasNulByte(value)) return [{ code: 400, msg: `${label} cannot contain null characters` }, null];
-  return [null, value.trim()];
+  const list = [...new Set(value.split(',').map(entry => entry.trim().toLowerCase()).filter(Boolean))];
+  const bad = list.find(entry => !KIND.test(entry));
+  if(bad) return [{ code: 400, msg: `"${bad}" is not a kind: use lowercase letters, numbers, hyphens and underscores` }, null];
+  return [null, list.join(',')];
 };
 
 export const VALIDATORS = {
-  refund_policy: text('The refund policy', 2000),
-  tax_class: text('The tax class', 100, { required: true }),
   low_balance_threshold: number('The low-balance threshold', 0, 1000000000),
-  purchase_limit_per_user: number('The per-account limit', 1, 100000),
-  purchase_limit_per_ip: number('The per-address limit', 1, 100000),
-  purchase_limit_global: number('The site-wide limit', 1, 10000000),
-  failed_payment_limit: number('The decline limit', 1, 1000),
-  failed_payment_cooldown_minutes: number('The cool-down', 1, 10080),
-  trust_proxy: flag('Trusting the proxy'),
+  non_transferable_kinds: kinds('Non-transferable kinds'),
 };
 
 /*

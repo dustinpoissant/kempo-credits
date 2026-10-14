@@ -1,11 +1,11 @@
 import DashboardWidget from '/kempo/components/DashboardWidget.js';
 import { html, nothing } from '/kempo-ui/lit-all.min.js';
 import { getSummary } from '/credits/sdk.js';
-import { formatAmount, formatCredits } from '/credits/utils/format.js';
+import { formatCredits } from '/credits/utils/format.js';
 
 /*
-  The dashboard's view of credits: what users hold — bought credits apart, because those are a
-  balance the site owes — what has sold in the last 30 days, and the things a person has to look at.
+  The dashboard's view of credits: how many are held, by how many users, and anybody who owes
+  credits after a refund — the one thing here that needs a person.
 */
 export default class CreditsWidget extends DashboardWidget {
   static properties = {
@@ -32,22 +32,16 @@ export default class CreditsWidget extends DashboardWidget {
   */
 
   renderContent(){
-    const { credits, purchases } = this.summary;
-    const attention = credits.owing + purchases.needsAttention + purchases.blockedLastDay;
+    const { credits } = this.summary;
 
     return html`
       <div class="d-f mb">
-        <div class="flex"><div class="h2 m0">${formatCredits(credits.paid)}</div><div class="tc-muted">Bought, unspent</div></div>
-        <div class="flex"><div class="h2 m0">${formatCredits(credits.promo)}</div><div class="tc-muted">Promo, unspent</div></div>
-        ${purchases.sales.map(sale => html`
-          <div class="flex"><div class="h2 m0">${formatAmount(sale.total - sale.refunded, sale.currency)}</div><div class="tc-muted">Taken in ${purchases.days} days, with tax, less refunds</div></div>
-        `)}
+        <div class="flex"><div class="h2 m0">${formatCredits(credits.total)}</div><div class="tc-muted">Credits held</div></div>
+        <div class="flex"><div class="h2 m0">${formatCredits(credits.holders)}</div><div class="tc-muted">User${credits.holders === 1 ? '' : 's'} holding some</div></div>
       </div>
-      ${attention ? html`
+      ${credits.owing ? html`
         <p class="tc-warning m0" role="alert">
-          ${credits.owing ? html`${credits.owing} owing after a refund. ` : nothing}
-          ${purchases.needsAttention ? html`${purchases.needsAttention} purchase${purchases.needsAttention === 1 ? '' : 's'} to check. ` : nothing}
-          ${purchases.blockedLastDay ? html`${purchases.blockedLastDay} blocked in a day.` : nothing}
+          ${formatCredits(credits.owing)} user${credits.owing === 1 ? '' : 's'} owe${credits.owing === 1 ? 's' : ''} ${formatCredits(credits.owed)} credits after a refund.
         </p>
       ` : nothing}
     `;

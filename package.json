@@ -1,7 +1,7 @@
 {
   "name": "kempo-credits",
   "version": "0.0.2",
-  "description": "An in-app currency for kempo — a credits ledger with paid and promotional balances, credit packs bought through kempo-payments, and promo claim links",
+  "description": "An in-app currency ledger for kempo — balances, an append-only history, transfers between users, and an SDK other extensions use to create and spend credits",
   "license": "MIT",
   "author": "Dustin Poissant",
   "type": "module",
@@ -9,7 +9,7 @@
   "scripts": {
     "test": "node scripts/run-tests.js unit kempo-test -l minimal",
     "test:integration": "node scripts/run-tests.js integration kempo-test -l minimal -t 120000",
-    "link:local": "npm install ../kempo ../kempo-server ../kempo-ui ../kempo-payments ../kempo-tax --no-save --no-legacy-peer-deps --force"
+    "link:local": "npm install ../kempo ../kempo-server ../kempo-ui --no-save --no-legacy-peer-deps --force"
   },
   "exports": {
     "./install": "./install.js",
@@ -19,7 +19,6 @@
   },
   "files": [
     "admin",
-    "hooks",
     "public",
     "server",
     "install.js",
@@ -37,21 +36,12 @@
   },
   "peerDependencies": {
     "kempo": ">=4.5.8",
-    "kempo-payments": ">=0.1.9",
     "kempo-server": ">=3.3.0",
-    "kempo-tax": ">=0.2.2",
     "kempo-ui": ">=0.4.53"
-  },
-  "peerDependenciesMeta": {
-    "kempo-tax": {
-      "optional": true
-    }
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.9",
     "drizzle-kit": "^0.31.10",
-    "kempo-payments": "^0.1.9",
-    "kempo-tax": "^0.2.2",
     "kempo-testing-framework": "^1.4.11",
     "playwright": "^1.64.0",
     "postgres": "^3.4.9"

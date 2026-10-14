@@ -13,31 +13,22 @@ import { getSettings, saveSettings } from '/credits/sdk.js';
 */
 
 const GROUPS = [
-  { title: 'At checkout', names: ['refund_policy', 'tax_class'] },
-  { title: 'Balances', note: 'Credits never expire, bought or promo.', names: ['low_balance_threshold'] },
+  { title: 'Balances', note: 'Credits never expire.', names: ['low_balance_threshold'] },
   {
-    title: 'Card-testing protection',
-    note: 'Limits on how often purchases can be attempted, counted over the last hour. Attempts over a limit are refused before they reach the payment processor and appear under Purchases → Blocked attempts.',
-    names: ['purchase_limit_per_user', 'purchase_limit_per_ip', 'purchase_limit_global', 'failed_payment_limit', 'failed_payment_cooldown_minutes', 'trust_proxy'],
+    title: 'Transfers',
+    note: 'Users can send their own credits to each other only once the credits:transfer permission is given to a group. Code that calls transferCredits directly is not stopped by that, but is by the setting below.',
+    names: ['non_transferable_kinds'],
   },
 ];
 
 const LABELS = {
-  refund_policy: 'Refund policy',
-  tax_class: 'Tax class',
   low_balance_threshold: 'Low-balance threshold',
-  purchase_limit_per_user: 'Attempts per account',
-  purchase_limit_per_ip: 'Attempts per IP address',
-  purchase_limit_global: 'Attempts for the whole site',
-  failed_payment_limit: 'Declines before a cool-down',
-  failed_payment_cooldown_minutes: 'Cool-down (minutes)',
-  trust_proxy: 'Behind a proxy',
+  non_transferable_kinds: 'Kinds that cannot be sent',
 };
 
 export default class Settings extends ShadowComponent {
   static properties = {
     settings: { type: Array, state: true },
-    tax: { type: Boolean, state: true },
     edits: { type: Object, state: true },
     busy: { type: Boolean, state: true },
     error: { type: String, state: true },
@@ -47,7 +38,6 @@ export default class Settings extends ShadowComponent {
   constructor(){
     super();
     this.settings = [];
-    this.tax = false;
     this.edits = {};
     this.busy = false;
     this.error = '';
@@ -71,7 +61,6 @@ export default class Settings extends ShadowComponent {
     const [error, data] = await getSettings();
     this.error = error ? error.msg : '';
     this.settings = data?.settings || [];
-    this.tax = !!data?.tax;
     this.edits = {};
   };
 
@@ -117,15 +106,6 @@ export default class Settings extends ShadowComponent {
       `;
     }
 
-    if(name === 'refund_policy'){
-      return html`
-        <label class="mb"><span class="d-b">${LABELS[name]}</span>
-          <textarea rows="3" maxlength="2000" .value=${value ?? ''} @input=${event => this.set(name, event.target.value)}></textarea>
-          <span class="tc-muted d-b">${description}</span>
-        </label>
-      `;
-    }
-
     return html`
       <label class="mb"><span class="d-b">${LABELS[name]}</span>
         <input
@@ -150,13 +130,6 @@ export default class Settings extends ShadowComponent {
             ${GROUPS.map(group => html`
               <h3>${group.title}</h3>
               ${group.note ? html`<p class="tc-muted">${group.note}</p>` : nothing}
-              ${group.title === 'At checkout' ? html`
-                <p class="${this.tax ? 'tc-success' : 'tc-muted'}">
-                  ${this.tax
-                    ? 'kempo-tax is enabled, so buyers give a billing address and tax is added to (or included in) each pack’s price.'
-                    : 'kempo-tax is not enabled, so packs are charged at their price with no tax. The tax class below is used if it is.'}
-                </p>
-              ` : nothing}
               ${group.names.map(name => this.settings.find(setting => setting.name === name)).filter(Boolean).map(setting => this.#renderField(setting))}
             `)}
             ${this.error ? html`<p class="tc-danger" role="alert">${this.error}</p>` : nothing}

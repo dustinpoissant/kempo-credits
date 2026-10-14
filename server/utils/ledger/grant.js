@@ -13,7 +13,7 @@ import { cleanAmount, cleanKey, cleanKind, cleanReference, cleanText, cleanUserI
   const [error, { lot, balance }] = await grantCredits({
     userId,
     amount: 500,
-    kind: 'promo',                      // or 'paid'
+    kind: 'achievement',                // optional label; 'general' when omitted
     reason: 'award',
     reference: { owner: 'my-extension', ref: competition.id },
     idempotencyKey: `award:${competition.id}:${userId}`,
@@ -22,9 +22,9 @@ import { cleanAmount, cleanKey, cleanKind, cleanReference, cleanText, cleanUserI
 
   Granting twice under the same key returns the first grant (`duplicate: true`) instead of making a
   second. That is what lets a webhook that is delivered twice, or a monthly allowance whose job runs
-  twice, give the credits once: a monthly grant is `idempotencyKey: \`monthly:${userId}:2026-10\``.
+  twice, give the credits once: a monthly grant is `idempotencyKey: `monthly:${userId}:2026-10``.
 
-  **Credits never expire**, paid or promo. A caller that passes an expiry is refused rather than
+  **Credits never expire.** A caller that passes an expiry is refused rather than
   ignored, so code written expecting one finds out at once.
 
   If the user owes credits — a refunded purchase they had already spent — the grant pays that off
@@ -39,8 +39,9 @@ export default async ({ userId, amount, kind, expiresAt, expiresInDays, reason, 
   if(userError) return [userError, null];
   const [amountError] = cleanAmount(amount);
   if(amountError) return [amountError, null];
-  const [kindError] = cleanKind(kind);
+  const [kindError, cleanedKind] = cleanKind(kind);
   if(kindError) return [kindError, null];
+  kind = cleanedKind;
   const [reasonError, cleanReason] = cleanText(reason, 'A reason', { required: true, max: 100 });
   if(reasonError) return [reasonError, null];
   const [referenceError, cleanRef] = cleanReference(reference);

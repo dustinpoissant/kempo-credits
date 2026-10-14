@@ -15,11 +15,15 @@ import { entryLabel, formatDateTime, signed } from '/credits/utils/format.js';
 
 const PAGE = 20;
 
+/*
+  What a reason says on this screen. Any reason an extension used that is not listed is shown as it
+  was written, which is what extensions are meant to write: words a person can read.
+*/
 const REASONS = {
-  purchase: 'Bought',
-  claim: 'Claimed from a link',
-  promo: 'Given by the site',
-  refund: 'Purchase refunded',
+  gift: 'A gift',
+  trade: 'A trade',
+  refund: 'Refunded',
+  'admin-grant': 'Given by the site',
   adjustment: 'Adjusted by the site',
   settlement: 'Applied to what was owed',
 };
@@ -27,6 +31,7 @@ const REASONS = {
 export default class History extends ShadowComponent {
   static properties = {
     entries: { type: Array, state: true },
+    counterparties: { type: Object, state: true },
     total: { type: Number, state: true },
     offset: { type: Number, state: true },
     loading: { type: Boolean, state: true },
@@ -36,6 +41,7 @@ export default class History extends ShadowComponent {
   constructor(){
     super();
     this.entries = [];
+    this.counterparties = {};
     this.total = 0;
     this.offset = 0;
     this.loading = true;
@@ -61,6 +67,7 @@ export default class History extends ShadowComponent {
     this.loading = false;
     this.error = error ? (error.code === 401 ? 'Sign in to see your credit history.' : error.msg) : '';
     this.entries = data?.entries || [];
+    this.counterparties = data?.counterparties || {};
     this.total = data?.total || 0;
   };
 
@@ -87,9 +94,9 @@ export default class History extends ShadowComponent {
               <tr>
                 <td class="tc-muted">${formatDateTime(entry.createdAt)}</td>
                 <td>
-                  ${entryLabel(entry.type)}
+                  ${entryLabel(entry.type)}${entry.counterpartyId ? html` ${entry.type === 'transfer_out' ? 'to' : 'from'} ${this.counterparties[entry.counterpartyId]?.name || 'a user who no longer exists'}` : nothing}
                   <span class="tc-muted d-b">
-                    ${REASONS[entry.reason] || entry.reason || nothing}${entry.kind === 'promo' ? ' · free credits' : nothing}
+                    ${REASONS[entry.reason] || entry.reason || nothing}
                   </span>
                 </td>
                 <td class="ta-right ${entry.amount < 0 ? '' : 'tc-success'}">${signed(entry.amount)}</td>

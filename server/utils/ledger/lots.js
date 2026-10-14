@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, lt, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, lt, notInArray, sql } from 'drizzle-orm';
 import { kempoCreditEntry, kempoCreditLot } from '../../db/schema.js';
 import newId from '../ids.js';
 import { abort } from './transaction.js';
@@ -7,21 +7,25 @@ import { abort } from './transaction.js';
   The pieces every ledger operation is built from. Each takes the transaction it runs in, and
   assumes the caller holds the user's lock (see transaction.js).
 
-  Credits never expire, paid or promo. There is no expiry on a lot and nothing that writes one off.
+  Credits never expire. There is no expiry on a lot and nothing that writes one off.
 */
 
 /*
-  The order credits are spent in: promo before paid, so what a user bought stays theirs — and
-  refundable — for as long as possible; oldest first after that.
+  The order credits are spent in: oldest first. Nothing about a lot's kind changes it — the ledger
+  does not know what a kind means.
 */
-export const SPENDING_ORDER = lot => [
-  sql`(${lot.kind} = 'promo') desc`,
-  asc(lot.createdAt),
-  asc(lot.id),
-];
+export const SPENDING_ORDER = lot => [asc(lot.createdAt), asc(lot.id)];
 
-export const spendableLots = (tx, userId) => tx.select().from(kempoCreditLot)
-  .where(and(eq(kempoCreditLot.userId, userId), gt(kempoCreditLot.remaining, 0)))
+/*
+  The lots a user can draw from, in spending order. `excludeKinds` leaves some out, which is how a
+  transfer skips credits the site has said cannot be given away.
+*/
+export const spendableLots = (tx, userId, { excludeKinds = [] } = {}) => tx.select().from(kempoCreditLot)
+  .where(and(
+    eq(kempoCreditLot.userId, userId),
+    gt(kempoCreditLot.remaining, 0),
+    excludeKinds.length ? notInArray(kempoCreditLot.kind, excludeKinds) : undefined,
+  ))
   .orderBy(...SPENDING_ORDER(kempoCreditLot));
 
 export const owingLots = (tx, userId) => tx.select().from(kempoCreditLot)
@@ -32,10 +36,11 @@ export const owingLots = (tx, userId) => tx.select().from(kempoCreditLot)
   The balance, worked out from the lots. Nothing caches it, so this is the only definition of it.
 */
 export const summarise = lots => {
-  const balance = { total: 0, paid: 0, promo: 0, owed: 0 };
+  const balance = { total: 0, owed: 0, byKind: {} };
 
   for(const lot of lots){
-    balance[lot.kind === 'promo' ? 'promo' : 'paid'] += lot.remaining;
+    if(!lot.remaining) continue;
+    balance.byKind[lot.kind] = (balance.byKind[lot.kind] || 0) + lot.remaining;
     balance.total += lot.remaining;
     if(lot.remaining < 0) balance.owed -= lot.remaining;
   }
@@ -72,7 +77,7 @@ export const operationEntries = (tx, operationId) => tx.select().from(kempoCredi
   never take a lot below zero, even if the lock somehow failed to serialise it. Only a `shortfall`
   is allowed to, because recording that a lot is below zero is exactly what a shortfall is.
 */
-export const writeOperation = async (tx, { userId, operationId, key = null, reason = null, reference = null, reversesOperationId = null, actorId = null, note = null, now }, moves) => {
+export const writeOperation = async (tx, { userId, operationId, key = null, reason = null, reference = null, reversesOperationId = null, counterpartyId = null, actorId = null, note = null, now }, moves) => {
   const entries = [];
 
   for(const [index, move] of moves.entries()){
@@ -100,6 +105,7 @@ export const writeOperation = async (tx, { userId, operationId, key = null, reas
       referenceId: reference?.ref ?? null,
       idempotencyKey: entries.length === 0 ? key : null,
       reversesOperationId,
+      counterpartyId,
       actorId,
       note,
       // Entries in one operation share a timestamp but keep their order.

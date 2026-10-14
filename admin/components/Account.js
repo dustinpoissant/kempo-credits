@@ -3,9 +3,9 @@ import '/kempo-ui/components/Icon.js';
 import '/kempo-ui/components/Spinner.js';
 import { html, css, nothing } from '/kempo-ui/lit-all.min.js';
 import {
-  clawBackLot, forgiveDebt, getAccount, grantPromo, listAccountEntries, newKey, removeCredits, reverseOperation,
+  clawBackLot, forgiveDebt, getAccount, grantCredits, listAccountEntries, newKey, removeCredits, reverseOperation,
 } from '/credits/sdk.js';
-import { entryLabel, formatCredits, formatDate, formatDateTime, signed } from '/credits/utils/format.js';
+import { entryLabel, formatCredits, formatDate, formatDateTime, kindLabel, signed } from '/credits/utils/format.js';
 import permissions from '/admin/extension/kempo-credits/components/permissions.js';
 
 /*
@@ -17,7 +17,7 @@ import permissions from '/admin/extension/kempo-credits/components/permissions.j
   wrong.
 
   The corrections live here, each behind its own permission and each needing a note, because the
-  note is what explains the entry to whoever reads this screen next: give promo credits
+  note is what explains the entry to whoever reads this screen next: give credits
   (credits:grant); take credits away, write off what is owed, claw a grant back or reverse a spend
   (credits:adjust).
 */
@@ -25,7 +25,7 @@ import permissions from '/admin/extension/kempo-credits/components/permissions.j
 const PAGE = 25;
 
 const ACTIONS = {
-  grant: { label: 'Give promo credits', permission: 'credits:grant', button: 'Give credits' },
+  grant: { label: 'Give credits', permission: 'credits:grant', button: 'Give credits' },
   remove: { label: 'Take credits away', permission: 'credits:adjust', button: 'Take them away' },
   forgive: { label: 'Write off what is owed', permission: 'credits:adjust', button: 'Write it off' },
 };
@@ -37,6 +37,7 @@ export default class Account extends ShadowComponent {
     account: { type: Object, state: true },
     entries: { type: Array, state: true },
     actors: { type: Object, state: true },
+    counterparties: { type: Object, state: true },
     entryTotal: { type: Number, state: true },
     offset: { type: Number, state: true },
     allowed: { type: Object, state: true },
@@ -57,6 +58,7 @@ export default class Account extends ShadowComponent {
     this.account = null;
     this.entries = [];
     this.actors = {};
+    this.counterparties = {};
     this.entryTotal = 0;
     this.offset = 0;
     this.allowed = new Set();
@@ -98,6 +100,7 @@ export default class Account extends ShadowComponent {
     this.account = account || null;
     this.entries = entries?.entries || [];
     this.actors = entries?.actors || {};
+    this.counterparties = entries?.counterparties || {};
     this.entryTotal = entries?.total || 0;
   };
 
@@ -155,7 +158,7 @@ export default class Account extends ShadowComponent {
     let result;
 
     if(this.action === 'grant'){
-      result = await grantPromo(this.userId, {
+      result = await grantCredits(this.userId, {
         amount: this.amount(),
         note,
         idempotencyKey,
@@ -198,13 +201,13 @@ export default class Account extends ShadowComponent {
         <div class="card tile">
           <span class="tc-muted">Balance</span>
           <span class="value ${balance.total < 0 ? 'tc-danger' : ''}">${formatCredits(balance.total)}</span>
-          <span class="tc-muted">${formatCredits(balance.paid)} bought · ${formatCredits(balance.promo)} promo</span>
+          <span class="tc-muted">${Object.entries(balance.byKind || {}).map(([kind, amount]) => `${formatCredits(amount)} ${kindLabel(kind).toLowerCase()}`).join(' · ') || 'No credits'}</span>
         </div>
         ${balance.owed ? html`
           <div class="card tile">
             <span class="tc-muted">Owes</span>
             <span class="value tc-danger">${formatCredits(balance.owed)}</span>
-            <span class="tc-muted">From a refund of credits already spent. Cannot spend until covered.</span>
+            <span class="tc-muted">A refund took back more than they held. They cannot spend until it is covered.</span>
           </div>
         ` : nothing}
       </div>
@@ -250,10 +253,10 @@ export default class Account extends ShadowComponent {
       <form class="card" @submit=${this.submit}>
         <p><strong>${title}</strong></p>
         ${this.target?.kind === 'lot' ? html`
-          <p class="tc-muted">Takes the credits back without refunding any money — for a chargeback the site lost, say. To refund a purchase, use Refund on it under Purchases. Credits come from this grant first, then their other credits; whatever they do not hold is recorded as owed and blocks spending until it is covered.</p>
+          <p class="tc-muted">Takes the credits back without moving any money — for a chargeback the site lost, say. Credits come from this grant first, then their other credits; whatever they do not hold is recorded as owed and blocks spending until it is covered.</p>
         ` : nothing}
         ${this.target?.kind === 'spend' ? html`
-          <p class="tc-muted">The credits go back to the lots they came from. Bought credits put back this way make their purchase refundable again.</p>
+          <p class="tc-muted">The credits go back to the lots they came from.</p>
         ` : nothing}
 
         <div class="row -mx">
@@ -293,7 +296,7 @@ export default class Account extends ShadowComponent {
             ${lots.map(lot => html`
               <tr>
                 <td>${formatDateTime(lot.createdAt)}</td>
-                <td>${lot.kind === 'paid' ? 'Bought' : 'Promo'}</td>
+                <td>${kindLabel(lot.kind)}</td>
                 <td class="ta-right">${formatCredits(lot.amount)}</td>
                 <td class="ta-right ${lot.remaining < 0 ? 'tc-danger' : ''}">
                   ${formatCredits(lot.remaining)}
@@ -303,7 +306,7 @@ export default class Account extends ShadowComponent {
                   ${lot.note ? html`<span class="d-b tc-muted">${lot.note}</span>` : nothing}
                 </td>
                 <td>
-                  ${canAdjust ? html`<button class="link" @click=${() => this.openTarget({ kind: 'lot', id: lot.id, label: `${formatCredits(lot.amount)} ${lot.kind === 'paid' ? 'bought' : 'promo'} credits from ${formatDate(lot.createdAt)}` })}>Claw back</button>` : nothing}
+                  ${canAdjust ? html`<button class="link" @click=${() => this.openTarget({ kind: 'lot', id: lot.id, label: `${formatCredits(lot.amount)} ${kindLabel(lot.kind).toLowerCase()} credits from ${formatDate(lot.createdAt)}` })}>Claw back</button>` : nothing}
                 </td>
               </tr>
             `)}
@@ -334,7 +337,10 @@ export default class Account extends ShadowComponent {
               return html`
                 <tr>
                   <td>${formatDateTime(entry.createdAt)}</td>
-                  <td>${entryLabel(entry.type)} <span class="tc-muted d-b">${entry.kind === 'paid' ? 'bought' : 'promo'} lot</span></td>
+                  <td>
+                    ${entryLabel(entry.type)}${entry.counterpartyId ? html` ${entry.type === 'transfer_out' ? 'to' : 'from'} ${this.counterparties[entry.counterpartyId]?.name || html`<span class="ff-mono">${entry.counterpartyId}</span>`}` : nothing}
+                    <span class="tc-muted d-b">${kindLabel(entry.kind)}</span>
+                  </td>
                   <td class="ta-right ${entry.amount < 0 ? '' : 'tc-success'}">${signed(entry.amount)}</td>
                   <td>
                     ${entry.reason || ''}${entry.referenceOwner ? html` <span class="tc-muted">· ${entry.referenceOwner} ${entry.referenceId}</span>` : nothing}

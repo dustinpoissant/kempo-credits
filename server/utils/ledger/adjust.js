@@ -10,8 +10,8 @@ import { cleanAmount, cleanKey, cleanText, cleanUserId } from './validate.js';
   idempotent, recorded with who did it and why — and neither can do anything the ledger could not
   explain afterwards.
 
-  Adding credits is not here: that is a grant (`grantCredits`, kind `promo`), which gets a lot of its
-  own, so it is spent and reported like every other grant.
+  Adding credits is not here: that is a grant (`grantCredits`), which gets a lot of its own, so it is
+  spent and reported like every other grant.
 */
 
 const prepare = ({ userId, amount, note, idempotencyKey }, { amountRequired }) => {

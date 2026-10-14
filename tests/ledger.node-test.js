@@ -17,7 +17,7 @@ import { freshUser, heard, invariant, key, listenToHooks, purge, stopListening, 
 const REF = { owner: 'test', ref: 'thing-1' };
 
 const grant = (userId, amount, extra = {}) => grantCredits({
-  userId, amount, kind: 'promo', reason: 'test', idempotencyKey: key(), ...extra,
+  userId, amount, reason: 'test', idempotencyKey: key(), ...extra,
 });
 
 const spend = (userId, amount, extra = {}) => spendCredits({
@@ -46,17 +46,17 @@ export const afterAll = async () => {
 export default {
   'a grant creates a lot, an entry and a balance': async ({ pass, fail }) => {
     const user = freshUser();
-    const [error, result] = await grant(user, 500, { kind: 'paid', reason: 'purchase', reference: { owner: 'kempo-credits', ref: 'pur_1' } });
+    const [error, result] = await grant(user, 500, { kind: 'purchase', reason: 'purchase', reference: { owner: 'kempo-credit-packs', ref: 'pur_1' } });
     if(error) return fail(error.msg);
 
     if(result.lot.amount !== 500 || result.lot.remaining !== 500) return fail(`lot is ${result.lot.amount}/${result.lot.remaining}`);
-    if(result.lot.kind !== 'paid') return fail('kind was not kept');
+    if(result.lot.kind !== 'purchase') return fail('kind was not kept');
     if('expiresAt' in result.lot) return fail('a lot has an expiry');
-    if(result.balance.total !== 500 || result.balance.paid !== 500 || result.balance.promo !== 0) return fail(`balance is ${JSON.stringify(result.balance)}`);
+    if(result.balance.total !== 500 || result.balance.byKind.purchase !== 500) return fail(`balance is ${JSON.stringify(result.balance)}`);
 
     const entries = await db.select().from(kempoCreditEntry).where(eq(kempoCreditEntry.lotId, result.lot.id));
     if(entries.length !== 1 || entries[0].type !== 'grant' || entries[0].amount !== 500) return fail('the grant entry is wrong');
-    if(entries[0].referenceOwner !== 'kempo-credits' || entries[0].referenceId !== 'pur_1') return fail('the reference was not recorded');
+    if(entries[0].referenceOwner !== 'kempo-credit-packs' || entries[0].referenceId !== 'pur_1') return fail('the reference was not recorded');
 
     if(!await check(user, fail)) return;
     pass('');
@@ -70,7 +70,7 @@ export default {
       [{ amount: -5 }, 400, 'a negative amount'],
       [{ amount: '100' }, 400, 'an amount as a string'],
       [{ amount: 2000000000 }, 400, 'an amount over the maximum'],
-      [{ kind: 'gift' }, 400, 'an unknown kind'],
+      [{ kind: 'Gift Card' }, 400, 'a kind that is not a label'],
       [{ reason: '' }, 400, 'no reason'],
       [{ idempotencyKey: '' }, 400, 'no key'],
       [{ idempotencyKey: 'a\u0000b' }, 400, 'a NUL byte in the key'],
@@ -82,7 +82,7 @@ export default {
     ];
 
     for(const [overrides, code, label] of cases){
-      const [error] = await grantCredits({ userId: user, amount: 100, kind: 'promo', reason: 'test', idempotencyKey: key(), ...overrides });
+      const [error] = await grantCredits({ userId: user, amount: 100, reason: 'test', idempotencyKey: key(), ...overrides });
       if(error?.code !== code) return fail(`${label}: expected ${code}, got ${error ? error.code : 'success'}`);
     }
 
@@ -116,30 +116,43 @@ export default {
     pass('');
   },
 
-  'credits are spent promo before paid, oldest first': async ({ pass, fail }) => {
+  'credits are spent oldest first, whatever their kind': async ({ pass, fail }) => {
     const user = freshUser();
-    const [, paidOld] = await grant(user, 100, { kind: 'paid' });
-    const [, promoOld] = await grant(user, 100, { kind: 'promo' });
-    const [, paidNew] = await grant(user, 100, { kind: 'paid' });
-    const [, promoNew] = await grant(user, 100, { kind: 'promo' });
+    const [, first] = await grant(user, 100, { kind: 'purchase' });
+    const [, second] = await grant(user, 100, { kind: 'achievement' });
+    const [, third] = await grant(user, 100, { kind: 'purchase' });
 
-    const [error, spent] = await spend(user, 350);
+    const [error, spent] = await spend(user, 250);
     if(error) return fail(error.msg);
 
     const drawn = spent.entries.map(entry => [entry.lotId, -entry.amount]);
-    const expected = [
-      [promoOld.lot.id, 100],  // promo first, oldest first
-      [promoNew.lot.id, 100],
-      [paidOld.lot.id, 100],   // then paid, oldest first
-      [paidNew.lot.id, 50],
-    ];
+    const expected = [[first.lot.id, 100], [second.lot.id, 100], [third.lot.id, 50]];
     if(JSON.stringify(drawn) !== JSON.stringify(expected)){
       return fail(`drew ${JSON.stringify(drawn)}, expected ${JSON.stringify(expected)}`);
     }
-    if(spent.balance.total !== 50 || spent.balance.paid !== 50) return fail(`balance is ${JSON.stringify(spent.balance)}`);
+    if(spent.balance.total !== 50 || spent.balance.byKind.purchase !== 50 || 'achievement' in spent.balance.byKind){
+      return fail(`balance is ${JSON.stringify(spent.balance)}`);
+    }
     if(spent.entries.filter(entry => entry.idempotencyKey).length !== 1) return fail('the key should be on exactly one entry of the operation');
 
     if(!await check(user, fail)) return;
+    pass('');
+  },
+
+  'a kind is a label: unset is general, anything lowercase goes, nothing else': async ({ pass, fail }) => {
+    const user = freshUser();
+    const [, plain] = await grant(user, 10);
+    if(plain.lot.kind !== 'general') return fail(`the default kind is ${plain.lot.kind}`);
+    const [, tagged] = await grant(user, 10, { kind: 'ad-reward_2' });
+    if(tagged.lot.kind !== 'ad-reward_2') return fail(`got ${tagged.lot.kind}`);
+
+    for(const kind of ['Paid', 'has space', ' ', 'x'.repeat(51), 'caf\u00e9', 5]){
+      const [error] = await grant(user, 10, { kind });
+      if(error?.code !== 400) return fail(`kind ${JSON.stringify(kind)} gave ${error?.code ?? 'success'}`);
+    }
+
+    const [, balance] = await getBalance({ userId: user });
+    if(balance.byKind.general !== 10 || balance.byKind['ad-reward_2'] !== 10) return fail(`byKind is ${JSON.stringify(balance.byKind)}`);
     pass('');
   },
 

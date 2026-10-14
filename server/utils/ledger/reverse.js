@@ -11,13 +11,13 @@ import { cleanKey, cleanText, cleanUserId } from './validate.js';
   await reverseSpend({ userId, idempotencyKey: `boost:${event.id}` });  // the spend's own key
   ```
 
-  Returning credits to the lot they came from is what keeps promo and paid apart — a feature that
-  fell through after being paid for with bought credits gives bought credits back, and those are
-  again refundable with the purchase they came from. A lot that went below zero after the spend — a
-  refund that could not take everything back — has its debt reduced instead.
+  Returning credits to the lot they came from keeps each kind of credit with its own history — a
+  feature that fell through after being paid for with credits that were bought gives those back to
+  the purchase they came from, so that purchase is again refundable by whatever sold them. A lot that
+  went below zero after the spend — a refund that could not take everything back — has its debt
+  reduced instead.
 
-  This is also how an administrator puts right a spend on something the user never received, before
-  that user asks for a refund of the purchase: see the README's "Refunds".
+  This is also how an administrator puts right a spend on something the user never received.
 
   Reversing twice reverses once: the second call returns the first reversal with `duplicate: true`.
 */

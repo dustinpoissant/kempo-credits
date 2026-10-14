@@ -1,11 +1,8 @@
 /*
   Words and numbers for the screens, served at /credits/utils/format.js.
 
-  Money goes through kempo-payments' own formatter, so a pack priced in yen is never shown as
-  hundredths of a yen.
+  Credits are whole numbers and have no currency, so nothing here deals in money.
 */
-
-export { formatAmount, toMinor, fromMinor, decimalsFor } from '/payments/utils/money.js';
 
 const number = new Intl.NumberFormat();
 
@@ -24,42 +21,24 @@ export const ENTRY_LABELS = {
   grant: 'Added',
   spend: 'Spent',
   reversal: 'Returned',
-  clawback: 'Refunded',
-  shortfall: 'Owed after refund',
+  clawback: 'Taken back',
+  shortfall: 'Owed after a refund',
   settlement: 'Applied to amount owed',
   removal: 'Removed',
   forgiveness: 'Written off',
+  transfer_out: 'Sent',
+  transfer_in: 'Received',
 };
 
 export const entryLabel = type => ENTRY_LABELS[type] || type;
 
-export const PURCHASE_LABELS = {
-  pending: 'Awaiting payment',
-  paid: 'Paid',
-  partially_refunded: 'Partly refunded',
-  refunded: 'Refunded',
-  failed: 'Failed',
-  canceled: 'Cancelled',
-  blocked: 'Blocked',
-};
-
-export const purchaseLabel = status => PURCHASE_LABELS[status] || status;
-
-export const purchaseTone = status => {
-  if(status === 'paid') return 'success';
-  if(status === 'blocked' || status === 'failed') return 'danger';
-  if(status === 'refunded' || status === 'partially_refunded') return 'warning';
-  return 'muted';
-};
-
-export const BLOCK_REASONS = {
-  'user-rate': 'Too many attempts from this account',
-  'ip-rate': 'Too many attempts from this address',
-  'global-rate': 'Site-wide limit reached',
-  'user-declines': 'Too many declines on this account',
-  'ip-declines': 'Too many declines from this address',
-};
-
-export const blockReason = reason => BLOCK_REASONS[reason] || reason || '';
-
 export const signed = amount => `${amount > 0 ? '+' : amount < 0 ? '−' : ''}${formatCredits(Math.abs(amount))}`;
+
+/*
+  A kind is a lowercase label (`general`, `achievement`, `purchase`); shown with its first letter up
+  and its separators as spaces.
+*/
+export const kindLabel = kind => {
+  const text = String(kind || 'general').replace(/[-_]+/g, ' ');
+  return text.charAt(0).toUpperCase() + text.slice(1);
+};

@@ -10,7 +10,14 @@
   refused up front rather than surfacing as a failed insert halfway through an operation.
 */
 
-export const KINDS = ['paid', 'promo'];
+/*
+  A lot's kind is a label the granting code chooses — `general`, `achievement`, `ad-reward`,
+  `purchase` — so the ledger can tell one source of credits from another without knowing what any of
+  them mean. The only thing the site itself does with one is the `non_transferable_kinds` setting.
+*/
+export const DEFAULT_KIND = 'general';
+
+const KIND_PATTERN = /^[a-z0-9][a-z0-9_-]{0,49}$/;
 
 /*
   Large enough for any real grant and well inside a Postgres integer, so a sum of a few of them can
@@ -40,7 +47,10 @@ export const cleanAmount = (amount, label = 'Amount') => {
 };
 
 export const cleanKind = kind => {
-  if(!KINDS.includes(kind)) return [{ code: 400, msg: `Kind must be one of: ${KINDS.join(', ')}` }, null];
+  if(kind === undefined || kind === null || kind === '') return [null, DEFAULT_KIND];
+  if(typeof kind !== 'string' || !KIND_PATTERN.test(kind)){
+    return [{ code: 400, msg: 'A kind is a short lowercase label: letters, numbers, hyphens and underscores, up to 50 characters' }, null];
+  }
   return [null, kind];
 };
 

@@ -55,7 +55,7 @@ export default {
 
   'every permission the code checks is declared': async ({ pass, fail }) => {
     const declared = new Set(config.permissions.map(permission => permission.name));
-    const events = new Set(['credits:granted', 'credits:spent', 'credits:reversed', 'credits:clawed-back', 'credits:low']);
+    const events = new Set(['credits:granted', 'credits:spent', 'credits:reversed', 'credits:transferred', 'credits:clawed-back', 'credits:low']);
     for(const [file, text] of contents){
       for(const match of text.matchAll(/['"](credits:[a-z:-]+)['"]/g)){
         if(!declared.has(match[1]) && !events.has(match[1])) return fail(`${relative(file)} uses "${match[1]}", which nothing declares`);
@@ -87,7 +87,7 @@ export default {
       for(const permission of group.permissions.filter(name => name !== 'system:admin:access')){
         if(!declared.has(permission)) return fail(`${group.name} grants "${permission}", which is not declared`);
       }
-      if(group.permissions.includes('credits:purchase')) return fail(`${group.name} grants credits:purchase, which every user already holds`);
+      if(group.permissions.includes('credits:transfer')) return fail(`${group.name} grants credits:transfer, which is for the site to give to members on purpose`);
     }
     pass('');
   },
@@ -159,7 +159,7 @@ export default {
   },
 
   'every hook, widget and page the config names exists': async ({ pass, fail }) => {
-    for(const [event, callback] of Object.entries(config.hooks)){
+    for(const [event, callback] of Object.entries(config.hooks || {})){
       const module = await import(pathToFileURL(path.join(root, callback)).href).catch(error => ({ error }));
       if(module.error) return fail(`the ${event} hook (${callback}) does not load: ${module.error.message}`);
       if(typeof module.default !== 'function') return fail(`the ${event} hook does not export a handler`);
@@ -193,7 +193,7 @@ export default {
   },
 
   'the package ships everything it needs and declares no file: specifier': async ({ pass, fail }) => {
-    for(const entry of ['admin', 'hooks', 'public', 'server', 'install.js', 'update.js', 'uninstall.js', 'sdk.js', 'kempo-config.json']){
+    for(const entry of ['admin', 'public', 'server', 'install.js', 'update.js', 'uninstall.js', 'sdk.js', 'kempo-config.json']){
       if(!pkg.files.includes(entry)) return fail(`package.json "files" leaves out ${entry}`);
     }
     for(const field of ['dependencies', 'devDependencies', 'peerDependencies']){
@@ -201,10 +201,33 @@ export default {
         if(String(range).startsWith('file:')) return fail(`${field}.${name} is ${range}`);
       }
     }
-    if(!pkg.peerDependencies['kempo-payments']) return fail('kempo-payments is a hard dependency and must be a peer');
-    if(!pkg.peerDependenciesMeta?.['kempo-tax']?.optional) return fail('kempo-tax must be an optional peer');
-    if(!config.dependencies.includes('kempo-payments')) return fail('kempo-config.json does not require kempo-payments');
-    if(config.dependencies.includes('kempo-tax')) return fail('kempo-tax is optional and must not be a required dependency');
+    pass('');
+  },
+
+  /*
+    The ledger knows nothing about money. Selling credits is kempo-credit-packs and handing them out
+    through links is kempo-credit-claims; both depend on this, and this depends on neither — nor on
+    kempo-payments or kempo-tax, which a site that only earns credits in a game has no use for.
+  */
+  'the ledger depends on no payment, tax, pack or claim code': async ({ pass, fail }) => {
+    const forbidden = ['kempo-payments', 'kempo-tax', 'kempo-credit-packs', 'kempo-credit-claims'];
+
+    for(const field of ['dependencies', 'devDependencies', 'peerDependencies']){
+      for(const name of Object.keys(pkg[field] || {})){
+        if(forbidden.includes(name)) return fail(`package.json ${field} names ${name}`);
+      }
+    }
+    if((config.dependencies || []).length) return fail(`kempo-config.json requires ${config.dependencies.join(', ')}`);
+
+    for(const [file, text] of contents){
+      for(const name of forbidden){
+        if(new RegExp(`from\\s+['"]${name}`).test(text) || text.includes(`/${name.replace('kempo-', '')}/`)) return fail(`${relative(file)} reaches into ${name}`);
+      }
+      if(/\b(kempoCreditPack|kempoCreditPurchase|kempoCreditClaim)\b/.test(text)) return fail(`${relative(file)} knows about a pack, purchase or claim`);
+    }
+    for(const name of Object.keys(schema)){
+      if(/pack|purchase|claim/i.test(name)) return fail(`the schema exports ${name}`);
+    }
     pass('');
   },
 
@@ -215,8 +238,6 @@ export default {
   'credits cannot expire: no expiry column, setting or sweep exists': async ({ pass, fail }) => {
     const lotColumns = getTableConfig(schema.kempoCreditLot).columns.map(column => column.name);
     if(lotColumns.some(name => /expir/i.test(name))) return fail(`kempoCreditLot has ${lotColumns.filter(name => /expir/i.test(name))}`);
-    const claimColumns = getTableConfig(schema.kempoCreditClaim).columns.map(column => column.name);
-    if(claimColumns.some(name => /^lotExpir/i.test(name))) return fail('a claim link can set its credits to expire');
 
     const settings = config.settings.map(setting => setting.name).filter(name => /expir/i.test(name));
     if(settings.length) return fail(`declared settings about expiry: ${settings.join(', ')}`);
@@ -226,10 +247,4 @@ export default {
     pass('');
   },
 
-  'kempo-tax is never imported statically': async ({ pass, fail }) => {
-    for(const [file, text] of contents){
-      if(/^\s*import\s[^;]*from\s+['"]kempo-tax/m.test(text)) return fail(`${relative(file)} imports kempo-tax at load time`);
-    }
-    pass('');
-  },
 };

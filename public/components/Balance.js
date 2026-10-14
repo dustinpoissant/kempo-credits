@@ -2,7 +2,7 @@ import ShadowComponent from '/kempo-ui/components/ShadowComponent.js';
 import '/kempo-ui/components/Icon.js';
 import { html, css, nothing } from '/kempo-ui/lit-all.min.js';
 import { getMyBalance } from '/credits/sdk.js';
-import { formatCredits } from '/credits/utils/format.js';
+import { formatCredits, kindLabel } from '/credits/utils/format.js';
 
 /*
   The signed-in user's balance, served at /credits/components/Balance.js.
@@ -13,7 +13,7 @@ import { formatCredits } from '/credits/utils/format.js';
   <k-cred-balance compact></k-cred-balance>  <!-- just the number, for a header -->
   ```
 
-  Call `refresh()` after anything that changes it — a purchase, a spend your page just made.
+  Call `refresh()` after anything that changes it — a spend your page just made, credits sent.
 */
 export default class Balance extends ShadowComponent {
   static properties = {
@@ -60,7 +60,8 @@ export default class Balance extends ShadowComponent {
     if(this.error) return html`<span class="tc-danger">${this.error}</span>`;
     if(!this.balance) return html`<span class="tc-muted">…</span>`;
 
-    const { total, paid, promo, owed } = this.balance;
+    const { total, owed, byKind } = this.balance;
+    const kinds = Object.entries(byKind || {});
 
     if(this.compact){
       return html`<span title="Your credits"><k-icon name="toll"></k-icon> ${formatCredits(total)}</span>`;
@@ -72,14 +73,12 @@ export default class Balance extends ShadowComponent {
         <div class="value ${total < 0 ? 'tc-danger' : ''}">${formatCredits(total)}</div>
         ${owed ? html`
           <p class="tc-danger">
-            You owe ${formatCredits(owed)} credits from a refunded purchase. Credits you get next go to that first,
+            You owe ${formatCredits(owed)} credits after a refund. Credits you get next go to that first,
             and you cannot spend until it is covered.
           </p>
-        ` : html`
-          <p class="tc-muted mb">
-            ${formatCredits(paid)} bought · ${formatCredits(promo)} free
-          </p>
-        `}
+        ` : kinds.length > 1 ? html`
+          <p class="tc-muted mb">${kinds.map(([kind, amount]) => `${formatCredits(amount)} ${kindLabel(kind).toLowerCase()}`).join(' · ')}</p>
+        ` : nothing}
       </div>
     `;
   }

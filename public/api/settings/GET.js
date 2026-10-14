@@ -1,11 +1,9 @@
 import { DECLARED_SETTINGS } from '../../../server/utils/config/declared.js';
 import { SETTING_NAMES, readConfig } from '../../../server/utils/config/settings.js';
-import { taxModule } from '../../../server/utils/purchases/tax.js';
 import { gate, refuse } from '../../../server/http/gate.js';
 
 /*
-  The settings screen: each setting's current value with its declared type and description, and
-  whether kempo-tax is taking part in purchases.
+  The settings screen: each setting's current value with its declared type and description.
 */
 export default async (request, response) => {
   const [gateError] = await gate(request, 'credits:settings');
@@ -20,6 +18,5 @@ export default async (request, response) => {
       type: DECLARED_SETTINGS.get(name)?.type || 'string',
       description: DECLARED_SETTINGS.get(name)?.description || '',
     })),
-    tax: !!await taxModule(),
   });
 };
