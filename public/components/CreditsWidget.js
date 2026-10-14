@@ -40,7 +40,7 @@ export default class CreditsWidget extends DashboardWidget {
         <div class="flex"><div class="h2 m0">${formatCredits(credits.paid)}</div><div class="tc-muted">Bought, unspent</div></div>
         <div class="flex"><div class="h2 m0">${formatCredits(credits.promo)}</div><div class="tc-muted">Promo, unspent</div></div>
         ${purchases.sales.map(sale => html`
-          <div class="flex"><div class="h2 m0">${formatAmount(sale.total - sale.refunded, sale.currency)}</div><div class="tc-muted">Sold in ${purchases.days} days</div></div>
+          <div class="flex"><div class="h2 m0">${formatAmount(sale.total - sale.refunded, sale.currency)}</div><div class="tc-muted">Taken in ${purchases.days} days, with tax, less refunds</div></div>
         `)}
       </div>
       ${attention ? html`

@@ -187,7 +187,7 @@ export default class Purchases extends ShadowComponent {
       <div class="d-f tiles">
         ${this.summary.sales.map(sale => html`
           <div class="card tile">
-            <span class="tc-muted">Sold in ${this.summary.days} days (${sale.currency.toUpperCase()})</span>
+            <span class="tc-muted">Taken in ${this.summary.days} days, with tax, less refunds (${sale.currency.toUpperCase()})</span>
             <span class="value">${formatAmount(sale.total - sale.refunded, sale.currency)}</span>
             <span class="tc-muted">${sale.count} purchase${sale.count === 1 ? '' : 's'} · ${formatCredits(sale.credits)} credits</span>
           </div>
