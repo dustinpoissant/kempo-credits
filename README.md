@@ -178,10 +178,14 @@ retry of both is safe.
 - Sending to yourself is a 400. A recipient who owes credits has what they receive pay that off first.
 - Fires `credits:transferred`, and `credits:low` for the sender if the balance crossed the threshold.
 
-**Users do not gift each other by default.** The route `POST /credits/api/my/transfers` and the *Send
-credits* form on `/credits/` need `credits:transfer`, which nobody holds until a site gives it to a
-group — `system:Users` for open gifting, or a group of players. Code calling `transferCredits`
-directly (a trading feature, say) needs no permission: it has already decided.
+**Users do not gift each other by default, and this is entirely optional.** Bought credits are
+transferable immediately — there is no holding period, and no site cut. Sending is behind
+`credits:transfer`, which nobody holds until a site gives it to a group. The API is
+`POST /credits/api/my/transfers` and the `<k-cred-send>` component is a ready-made form for it; a site
+that wants everyone to gift gives `credits:transfer` to `system:Users` and puts the component on a
+page of its own. The `/credits/` page shows the form to holders of the permission and to nobody
+else. Code calling `transferCredits` directly (a trading feature, say) needs no permission: it has
+already decided.
 
 ## Hooks
 

@@ -52,3 +52,5 @@ By the owner (2026-10-14):
 - **Spent credits are never refunded as money**; a glitch is put right by giving the credits back
   first. (Enforced by kempo-credit-packs.)
 - **Transfers** between accounts exist, for trading and gifting.
+- **Bought credits are transferable immediately** (no holding period), gifting is behind
+  `credits:transfer` with an API and no built-in public page, and there is **no site cut** on transfers.

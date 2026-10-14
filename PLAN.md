@@ -114,11 +114,13 @@ extension. Specifically:
 - **Transfers between accounts exist**, for in-game currency trading and gifting. Users cannot gift
   by default (`credits:transfer`); code can always call `transferCredits`.
 
+- **Bought credits are transferable immediately.** No holding period; the only lever is a site
+  marking kinds non-transferable (`non_transferable_kinds`).
+- **Gifting is behind `credits:transfer`, with an API and nothing built in.** The route and the
+  `<k-cred-send>` component exist; a site that wants everyone to gift gives the permission to
+  `system:Users` and builds its own public page. Entirely optional.
+- **No site cut on transfers.**
+
 ## Open questions for the owner (do not guess)
 
-- **Transfer risk.** Should credits bought with a card be transferable at once, or held for a period?
-  A holding period would blunt gift-card-style laundering of stolen cards. Today a site can mark kinds
-  non-transferable (`non_transferable_kinds`), which is the lever; there is no time-based rule.
-- **Gifting from the UI.** The *Send credits* form exists but only for holders of `credits:transfer`.
-  Should it be on for everyone on a game site?
 - **Minimum purchase or maximum balance limits?** Not built.
