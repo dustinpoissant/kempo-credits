@@ -3,6 +3,14 @@
 > Status: **planned, nothing built.** This file is the brief. An agent picking this up should build
 > exactly what it describes, and raise anything it disagrees with here rather than improvising.
 
+> **Upstream changes are allowed.** Every dependency with `kempo` in its name (kempo, kempo-ui,
+> kempo-css, kempo-server, kempo-payments, kempo-media, and the rest) is owned by the same person, and
+> the goal of this project is to keep improving all of them. If the work here needs a change in one of
+> them — a UI component, a payment call, a CMS hook — **make it, in that repository, without asking
+> and without deferring it to a later step.** Do it the normal way there: tests, README and CHANGELOG,
+> a backwards-compatible change where other packages depend on it, and the dependency order when
+> publishing. Never commit a `file:` specifier.
+
 ## What it is
 
 An in-app currency for kempo sites: users hold a **balance of credits**, credits are **granted**
