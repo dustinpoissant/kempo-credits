@@ -1,10 +1,10 @@
 import { and, eq, gte, sql } from 'drizzle-orm';
 import db from 'kempo/server/db/index.js';
 import { cancelPayment, getPayment, isAwaitingCustomer, syncPayment } from 'kempo-payments/sdk';
-import { kempoCreditEntry, kempoCreditPurchase } from '../../db/schema.js';
+import { kempoCreditPurchase } from '../../db/schema.js';
 import { OWNER, readConfig } from '../config/settings.js';
 import grantCredits from '../ledger/grant.js';
-import clawBackGrant from '../ledger/clawback.js';
+import { clawBackGrant, findLot, grantState } from '../ledger/clawback.js';
 import { notifyAdmins } from '../ledger/events.js';
 import { REASONS } from './limits.js';
 import { taxModule } from './tax.js';
@@ -36,12 +36,15 @@ export const creditsForRefund = (credits, refunded, captured) => {
   return Number((BigInt(credits) * BigInt(refunded) + BigInt(captured) - 1n) / BigInt(captured));
 };
 
+/*
+  Credits already taken back for a purchase's grant — wherever they were taken from, since a refund
+  takes from the user's other credits once the purchase's own are used up.
+*/
 const clawedSoFar = async lotId => {
   if(!lotId) return 0;
-  const [row] = await db.select({ total: sql`coalesce(-sum(${kempoCreditEntry.amount}), 0)::int` })
-    .from(kempoCreditEntry)
-    .where(and(eq(kempoCreditEntry.lotId, lotId), sql`${kempoCreditEntry.type} in ('clawback', 'shortfall')`));
-  return row?.total ?? 0;
+  const [error, lot] = await findLot({ lotId });
+  if(error) return 0;
+  return (await grantState(db, lot)).clawed;
 };
 
 /*

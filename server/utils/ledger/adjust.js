@@ -1,7 +1,7 @@
 import { readConfig } from '../config/settings.js';
 import newId from '../ids.js';
 import { crossedLow, fire } from './events.js';
-import { balanceIn, expireDue, findOperation, owingLots, spendableLots, takeInOrder, writeOperation } from './lots.js';
+import { balanceIn, findOperation, owingLots, spendableLots, takeInOrder, writeOperation } from './lots.js';
 import { abort, withUserLocks } from './transaction.js';
 import { cleanAmount, cleanKey, cleanText, cleanUserId } from './validate.js';
 
@@ -10,8 +10,8 @@ import { cleanAmount, cleanKey, cleanText, cleanUserId } from './validate.js';
   idempotent, recorded with who did it and why — and neither can do anything the ledger could not
   explain afterwards.
 
-  Adding credits is not here: that is a grant (`grantCredits`, kind `promo`), and it gets a lot of its
-  own with its own expiry, so it is spent and reported like every other grant.
+  Adding credits is not here: that is a grant (`grantCredits`, kind `promo`), which gets a lot of its
+  own, so it is spent and reported like every other grant.
 */
 
 const prepare = ({ userId, amount, note, idempotencyKey }, { amountRequired }) => {
@@ -28,12 +28,12 @@ const prepare = ({ userId, amount, note, idempotencyKey }, { amountRequired }) =
   return [null, { user, note: cleanNote, key }];
 };
 
-const replay = async (tx, user, key, type, now, config) => {
+const replay = async (tx, user, key, type) => {
   const existing = await findOperation(tx, user, key);
   if(!existing) return null;
   if(existing.first.type !== type) abort(409, `That idempotency key was already used for a ${existing.first.type}`);
   const amount = Math.abs(existing.entries.reduce((sum, entry) => sum + entry.amount, 0));
-  const balance = await balanceIn(tx, user, now, config);
+  const balance = await balanceIn(tx, user);
   return [null, { duplicate: true, operationId: existing.first.operationId, amount, entries: existing.entries, balance, before: balance }];
 };
 
@@ -49,17 +49,16 @@ export const removeCredits = async ({ userId, amount, note, idempotencyKey, acto
   const now = new Date();
 
   const [error, result] = await withUserLocks([user], async tx => {
-    const duplicate = await replay(tx, user, key, 'removal', now, config);
+    const duplicate = await replay(tx, user, key, 'removal');
     if(duplicate) return duplicate;
 
-    await expireDue(tx, user, now);
-    const before = await balanceIn(tx, user, now, config);
-    const moves = takeInOrder(await spendableLots(tx, user, now), amount, 'removal');
+    const before = await balanceIn(tx, user);
+    const moves = takeInOrder(await spendableLots(tx, user), amount, 'removal');
     if(!moves) abort(402, `They only have ${Math.max(before.total, 0)} credits to remove`, { balance: before.total, needed: amount });
 
     const operationId = newId('op');
     const entries = await writeOperation(tx, { userId: user, operationId, key, reason: 'adjustment', actorId, note: input.note, now }, moves);
-    return [null, { duplicate: false, operationId, amount, entries, balance: await balanceIn(tx, user, now, config), before }];
+    return [null, { duplicate: false, operationId, amount, entries, balance: await balanceIn(tx, user), before }];
   });
 
   if(error) return [error, null];
@@ -84,7 +83,7 @@ export const forgiveDebt = async ({ userId, amount, note, idempotencyKey, actorI
   const now = new Date();
 
   const [error, result] = await withUserLocks([user], async tx => {
-    const duplicate = await replay(tx, user, key, 'forgiveness', now, config);
+    const duplicate = await replay(tx, user, key, 'forgiveness');
     if(duplicate) return duplicate;
 
     const owing = await owingLots(tx, user);
@@ -103,7 +102,7 @@ export const forgiveDebt = async ({ userId, amount, note, idempotencyKey, actorI
 
     const operationId = newId('op');
     const entries = await writeOperation(tx, { userId: user, operationId, key, reason: 'adjustment', actorId, note: input.note, now }, moves);
-    const balance = await balanceIn(tx, user, now, config);
+    const balance = await balanceIn(tx, user);
     return [null, { duplicate: false, operationId, amount: amount || owed, entries, balance, before: balance }];
   });
 

@@ -30,9 +30,9 @@
 export { default as grantCredits } from './server/utils/ledger/grant.js';
 export { default as spendCredits } from './server/utils/ledger/spend.js';
 export { default as reverseSpend } from './server/utils/ledger/reverse.js';
-export { default as clawBackGrant } from './server/utils/ledger/clawback.js';
+export { clawBackGrant } from './server/utils/ledger/clawback.js';
 export { removeCredits, forgiveDebt } from './server/utils/ledger/adjust.js';
-export { getBalance, getLot, listLots, listEntries, getOperation, listAccounts, auditAccount, creditTotals, expireLots } from './server/utils/ledger/read.js';
+export { getBalance, getLot, listLots, listEntries, getOperation, listAccounts, auditAccount, creditTotals } from './server/utils/ledger/read.js';
 export { EVENTS } from './server/utils/ledger/events.js';
 export { KINDS, MAX_AMOUNT } from './server/utils/ledger/validate.js';
 
@@ -41,6 +41,7 @@ export { listPacks, getPack, createPack, updatePack, deletePack } from './server
 export { default as startPurchase } from './server/utils/purchases/start.js';
 export { getPurchase, listPurchases, purchaseSummary, presentForBuyer, STATUSES as PURCHASE_STATUSES } from './server/utils/purchases/store.js';
 export { reconcilePurchase, checkPurchase, creditsForRefund } from './server/utils/purchases/payments.js';
+export { refundableFor, refundPurchase, checkRefund } from './server/utils/purchases/refund.js';
 export { checkLimits } from './server/utils/purchases/limits.js';
 export { taxModule, priceFor } from './server/utils/purchases/tax.js';
 

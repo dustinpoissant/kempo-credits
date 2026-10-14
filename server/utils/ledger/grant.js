@@ -1,11 +1,10 @@
 import { eq } from 'drizzle-orm';
 import { kempoCreditLot } from '../../db/schema.js';
-import { readConfig } from '../config/settings.js';
 import newId from '../ids.js';
 import { fire } from './events.js';
-import { balanceIn, expireDue, findOperation, settle, writeOperation } from './lots.js';
+import { balanceIn, findOperation, settle, writeOperation } from './lots.js';
 import { abort, withUserLocks } from './transaction.js';
-import { cleanAmount, cleanExpiry, cleanKey, cleanKind, cleanReference, cleanText, cleanUserId } from './validate.js';
+import { cleanAmount, cleanKey, cleanKind, cleanReference, cleanText, cleanUserId } from './validate.js';
 
 /*
   Creates a lot and the entry that fills it.
@@ -14,8 +13,7 @@ import { cleanAmount, cleanExpiry, cleanKey, cleanKind, cleanReference, cleanTex
   const [error, { lot, balance }] = await grantCredits({
     userId,
     amount: 500,
-    kind: 'promo',                      // or 'paid' — see below
-    expiresInDays: 30,                  // or expiresAt: a date; or neither
+    kind: 'promo',                      // or 'paid'
     reason: 'award',
     reference: { owner: 'my-extension', ref: competition.id },
     idempotencyKey: `award:${competition.id}:${userId}`,
@@ -26,14 +24,17 @@ import { cleanAmount, cleanExpiry, cleanKey, cleanKind, cleanReference, cleanTex
   second. That is what lets a webhook that is delivered twice, or a monthly allowance whose job runs
   twice, give the credits once: a monthly grant is `idempotencyKey: \`monthly:${userId}:2026-10\``.
 
-  **Paid credits do not expire** unless the site has turned on `paid_credits_expire`, and then they
-  expire a fixed number of days after the grant. A caller cannot set its own expiry on paid credits —
-  that is the site's policy to set, not each feature's.
+  **Credits never expire**, paid or promo. A caller that passes an expiry is refused rather than
+  ignored, so code written expecting one finds out at once.
 
   If the user owes credits — a refunded purchase they had already spent — the grant pays that off
   first, and `settled` says how much of it did. Their balance is what is left.
 */
 export default async ({ userId, amount, kind, expiresAt, expiresInDays, reason, reference, idempotencyKey, actorId = null, note = null } = {}) => {
+  if((expiresAt !== undefined && expiresAt !== null) || (expiresInDays !== undefined && expiresInDays !== null)){
+    return [{ code: 400, msg: 'Credits do not expire, so a grant cannot have an expiry' }, null];
+  }
+
   const [userError, user] = cleanUserId(userId);
   if(userError) return [userError, null];
   const [amountError] = cleanAmount(amount);
@@ -49,22 +50,7 @@ export default async ({ userId, amount, kind, expiresAt, expiresInDays, reason, 
   const [noteError, cleanNote] = cleanText(note, 'A note');
   if(noteError) return [noteError, null];
 
-  const config = await readConfig();
   const now = new Date();
-
-  let expiry = null;
-  if(kind === 'paid'){
-    if(expiresAt || expiresInDays){
-      return [{ code: 400, msg: 'Bought credits expire only by the site’s own setting, never per grant' }, null];
-    }
-    if(config.paidCreditsExpire){
-      [, expiry] = cleanExpiry({ expiresInDays: config.paidCreditsExpiryDays }, now);
-    }
-  } else {
-    const [expiryError, date] = cleanExpiry({ expiresAt, expiresInDays }, now);
-    if(expiryError) return [expiryError, null];
-    expiry = date;
-  }
 
   const [error, result] = await withUserLocks([user], async tx => {
     const existing = await findOperation(tx, user, key);
@@ -82,11 +68,9 @@ export default async ({ userId, amount, kind, expiresAt, expiresInDays, reason, 
         kind: lot.kind,
         settled: entries.filter(entry => entry.type === 'settlement' && entry.amount > 0).reduce((sum, entry) => sum + entry.amount, 0),
         entries,
-        balance: await balanceIn(tx, user, now, config),
+        balance: await balanceIn(tx, user),
       }];
     }
-
-    await expireDue(tx, user, now);
 
     const operationId = newId('op');
     const lot = {
@@ -95,7 +79,6 @@ export default async ({ userId, amount, kind, expiresAt, expiresInDays, reason, 
       kind,
       amount,
       remaining: 0,
-      expiresAt: expiry,
       reason: cleanReason,
       referenceOwner: cleanRef?.owner ?? null,
       referenceId: cleanRef?.ref ?? null,
@@ -123,7 +106,7 @@ export default async ({ userId, amount, kind, expiresAt, expiresInDays, reason, 
       kind,
       settled: settlement.filter(entry => entry.amount > 0).reduce((sum, entry) => sum + entry.amount, 0),
       entries: [...granted, ...settlement],
-      balance: await balanceIn(tx, user, now, config),
+      balance: await balanceIn(tx, user),
     }];
   }, { conflict: 'That idempotency key was already used' });
 

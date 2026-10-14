@@ -2,7 +2,7 @@ import ShadowComponent from '/kempo-ui/components/ShadowComponent.js';
 import '/kempo-ui/components/Icon.js';
 import { html, css, nothing } from '/kempo-ui/lit-all.min.js';
 import { getMyBalance } from '/credits/sdk.js';
-import { formatCredits, formatDate } from '/credits/utils/format.js';
+import { formatCredits } from '/credits/utils/format.js';
 
 /*
   The signed-in user's balance, served at /credits/components/Balance.js.
@@ -60,7 +60,7 @@ export default class Balance extends ShadowComponent {
     if(this.error) return html`<span class="tc-danger">${this.error}</span>`;
     if(!this.balance) return html`<span class="tc-muted">…</span>`;
 
-    const { total, paid, promo, owed, expiringSoon, nextExpiresAt } = this.balance;
+    const { total, paid, promo, owed } = this.balance;
 
     if(this.compact){
       return html`<span title="Your credits"><k-icon name="toll"></k-icon> ${formatCredits(total)}</span>`;
@@ -78,8 +78,6 @@ export default class Balance extends ShadowComponent {
         ` : html`
           <p class="tc-muted mb">
             ${formatCredits(paid)} bought · ${formatCredits(promo)} free
-            ${expiringSoon ? html`· <span class="tc-warning">${formatCredits(expiringSoon)} expire soon</span>` : nothing}
-            ${nextExpiresAt && !expiringSoon ? html`· next expiry ${formatDate(nextExpiresAt)}` : nothing}
           </p>
         `}
       </div>

@@ -2,9 +2,9 @@ import ShadowComponent from '/kempo-ui/components/ShadowComponent.js';
 import '/kempo-ui/components/Icon.js';
 import '/kempo-ui/components/Spinner.js';
 import { html, css, nothing } from '/kempo-ui/lit-all.min.js';
-import { clawBackLot, getPurchase, getSummary, listPurchases, newKey, reconcilePurchase } from '/credits/sdk.js';
+import { clawBackLot, getPurchase, getSummary, listPurchases, newKey, reconcilePurchase, refundPurchase } from '/credits/sdk.js';
 import {
-  blockReason, entryLabel, formatAmount, formatCredits, formatDateTime, purchaseLabel, purchaseTone, signed,
+  blockReason, entryLabel, formatAmount, formatCredits, formatDateTime, fromMinor, purchaseLabel, purchaseTone, signed, toMinor,
 } from '/credits/utils/format.js';
 import permissions from '/admin/extension/kempo-credits/components/permissions.js';
 
@@ -45,6 +45,8 @@ export default class Purchases extends ShadowComponent {
     detail: { type: Object, state: true },
     allowed: { type: Object, state: true },
     clawing: { type: Boolean, state: true },
+    refunding: { type: Boolean, state: true },
+    refundAmount: { type: String, state: true },
     note: { type: String, state: true },
     busy: { type: Boolean, state: true },
     loading: { type: Boolean, state: true },
@@ -66,6 +68,8 @@ export default class Purchases extends ShadowComponent {
     this.detail = null;
     this.allowed = new Set();
     this.clawing = false;
+    this.refunding = false;
+    this.refundAmount = '';
     this.note = '';
     this.busy = false;
     this.loading = true;
@@ -126,6 +130,7 @@ export default class Purchases extends ShadowComponent {
     this.purchaseId = id;
     this.detail = null;
     this.clawing = false;
+    this.refunding = false;
     this.notice = '';
     const [error, data] = await getPurchase(id);
     this.error = error ? error.msg : '';
@@ -155,8 +160,38 @@ export default class Purchases extends ShadowComponent {
     this.notice = 'Checked with the payment processor.';
   };
 
+  /*
+    Refunding gives money back for credits the buyer still holds, and no more — the server works out
+    how much that is, and refuses anything over it. Taking the credits back happens when the
+    processor confirms the refund, the same as for a refund made anywhere else.
+  */
+  startRefund = () => {
+    this.refunding = true;
+    this.clawing = false;
+    this.note = '';
+    this.refundAmount = String(fromMinor(this.detail.refundable.amount, this.detail.purchase.currency));
+  };
+
+  refund = async event => {
+    event.preventDefault();
+    const { purchase, refundable } = this.detail;
+    const amount = toMinor(this.refundAmount, purchase.currency);
+    this.busy = true;
+    this.error = '';
+    const [error] = await refundPurchase(purchase.id, { amount: amount === refundable.amount ? undefined : amount, reason: this.note });
+    this.busy = false;
+    if(error){
+      this.error = error.msg;
+      return;
+    }
+    this.refunding = false;
+    await this.open(this.purchaseId);
+    this.notice = `Refunded ${formatAmount(amount, purchase.currency)}.`;
+  };
+
   startClawBack = () => {
     this.clawing = true;
+    this.refunding = false;
     this.note = '';
     this.#key = newKey();
   };
@@ -205,6 +240,59 @@ export default class Purchases extends ShadowComponent {
           </div>
         ` : nothing}
       </div>
+    `;
+  }
+
+  #renderRefund(){
+    const { purchase, refundable } = this.detail;
+    if(!refundable || !['paid', 'partially_refunded'].includes(purchase.status)) return nothing;
+    const canRefund = this.allowed.has('credits:adjust') && this.allowed.has('payments:refund');
+
+    if(!refundable.amount){
+      return html`
+        <h3>Refund</h3>
+        <p class="tc-muted">
+          ${refundable.claimable === 0 ? 'Nothing of this purchase is left to refund.' : html`
+            All of its credits have been spent, and spent credits are not refunded. If they were spent on something
+            the buyer never received, give them back first — reverse that spend on
+            <a href="/admin/extension/kempo-credits/?user=${encodeURIComponent(purchase.userId)}">the buyer's ledger</a>,
+            or give them credits — and the purchase becomes refundable.
+          `}
+        </p>
+      `;
+    }
+
+    return html`
+      <h3>Refund</h3>
+      <p>
+        ${formatCredits(refundable.credits)} of its credits can still be given back, so up to
+        <strong>${formatAmount(refundable.amount, purchase.currency)}</strong> can be refunded.
+      </p>
+      ${refundable.spent ? html`
+        <p class="tc-muted">
+          ${formatCredits(refundable.spent)} of its credits have been spent and are not refundable. If they went on something the
+          buyer never received, give them back first — reverse that spend on
+          <a href="/admin/extension/kempo-credits/?user=${encodeURIComponent(purchase.userId)}">the buyer's ledger</a>, or give them
+          credits — and they become refundable too.
+        </p>
+      ` : nothing}
+      ${!canRefund ? html`<p class="tc-muted">Refunding needs both credits:adjust and payments:refund.</p>` : this.refunding ? html`
+        <form class="card" @submit=${this.refund}>
+          <div class="row -mx">
+            <label class="span-4 m-span-12 px"><span class="d-b">Amount (${purchase.currency.toUpperCase()})</span>
+              <input type="number" required min="0.01" step="any" .value=${this.refundAmount} @input=${event => { this.refundAmount = event.target.value; }} />
+            </label>
+            <label class="span-8 m-span-12 px"><span class="d-b">Why (required)</span>
+              <input type="text" required maxlength="500" .value=${this.note} @input=${event => { this.note = event.target.value; }} />
+            </label>
+          </div>
+          <p class="tc-muted">The money goes back through the payment processor, and the credits it paid for are taken back when the processor confirms it.</p>
+          <div class="d-f actions mb">
+            <button class="danger" type="submit" ?disabled=${this.busy}>${this.busy ? 'Refunding…' : 'Refund'}</button>
+            <button type="button" @click=${() => { this.refunding = false; }}>Cancel</button>
+          </div>
+        </form>
+      ` : html`<button class="danger mb" @click=${this.startRefund}>Refund…</button>`}
     `;
   }
 
@@ -318,15 +406,17 @@ export default class Purchases extends ShadowComponent {
         </div>
       </div>
 
+      ${this.#renderRefund()}
+
       ${lot ? html`
         <h3>The credits it granted</h3>
         <p>
           ${formatCredits(lot.amount)} ${lot.kind === 'paid' ? 'bought' : 'promo'} credits, ${formatCredits(lot.remaining)} left.
-          ${canAdjust && lot.remaining > 0 ? html`<button class="link" @click=${this.startClawBack}>Claw them back</button>` : nothing}
+          ${canAdjust && lot.remaining > 0 ? html`<button class="link" @click=${this.startClawBack}>Take them back without a refund</button>` : nothing}
         </p>
         ${this.clawing ? html`
           <form class="card" @submit=${this.clawBack}>
-            <p class="tc-muted">Takes back what is left. Anything already spent is recorded as owed and stops the buyer spending until it is covered.</p>
+            <p class="tc-muted">Takes the credits back and gives no money back — for a chargeback the site lost, say. They come from this purchase first, then the buyer's other credits; anything they do not hold is recorded as owed and stops them spending until it is covered.</p>
             <label><span class="d-b">Why (required)</span>
               <input type="text" required maxlength="500" .value=${this.note} @input=${event => { this.note = event.target.value; }} />
             </label>

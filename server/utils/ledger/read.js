@@ -1,15 +1,12 @@
-import { and, asc, desc, eq, gt, ilike, inArray, isNotNull, lte, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, ilike, inArray, or, sql } from 'drizzle-orm';
 import db from 'kempo/server/db/index.js';
 import { user } from 'kempo/server/db/schema.js';
 import { kempoCreditEntry, kempoCreditLot } from '../../db/schema.js';
-import { readConfig } from '../config/settings.js';
-import { expireDue, isLive, summarise } from './lots.js';
-import { withUserLocks } from './transaction.js';
+import { summarise } from './lots.js';
 import { cleanUserId, hasNulByte } from './validate.js';
 
 /*
-  Reading the ledger. Nothing here writes except `expireLots`, which is a sweep somebody runs on
-  purpose; reading a balance never changes one.
+  Reading the ledger. Nothing here writes.
 */
 
 const page = (limit, offset, max = 200) => ({
@@ -18,19 +15,17 @@ const page = (limit, offset, max = 200) => ({
 });
 
 /*
-  `{ total, paid, promo, owed, expiringSoon, nextExpiresAt }`. `total` is what can be spent, and is
-  below zero only when the user owes credits from a refunded purchase — `owed` says how many.
-  `expiringSoon` is how many of them expire within the `expiring_soon_days` setting.
+  `{ total, paid, promo, owed }`. `total` is what can be spent, and is below zero only when the user
+  owes credits from a refund that took back more than they held — `owed` says how many.
 */
 export const getBalance = async ({ userId } = {}) => {
   const [userError, id] = cleanUserId(userId);
   if(userError) return [userError, null];
 
   try {
-    const config = await readConfig();
     const lots = await db.select().from(kempoCreditLot)
       .where(and(eq(kempoCreditLot.userId, id), sql`${kempoCreditLot.remaining} <> 0`));
-    return [null, summarise(lots, new Date(), config)];
+    return [null, summarise(lots)];
   } catch {
     return [{ code: 500, msg: 'Could not load the balance' }, null];
   }
@@ -48,7 +43,7 @@ export const getLot = async ({ lotId } = {}) => {
     const entries = await db.select().from(kempoCreditEntry)
       .where(eq(kempoCreditEntry.lotId, lotId))
       .orderBy(asc(kempoCreditEntry.createdAt), asc(kempoCreditEntry.id));
-    return [null, { ...lot, live: isLive(lot, new Date()), entries }];
+    return [null, { ...lot, entries }];
   } catch {
     return [{ code: 500, msg: 'Could not load the lot' }, null];
   }
@@ -62,8 +57,7 @@ export const listLots = async ({ userId, includeEmpty = true } = {}) => {
     const rows = await db.select().from(kempoCreditLot)
       .where(includeEmpty ? eq(kempoCreditLot.userId, id) : and(eq(kempoCreditLot.userId, id), sql`${kempoCreditLot.remaining} <> 0`))
       .orderBy(desc(kempoCreditLot.createdAt), desc(kempoCreditLot.id));
-    const now = new Date();
-    return [null, rows.map(lot => ({ ...lot, live: isLive(lot, now) }))];
+    return [null, rows];
   } catch {
     return [{ code: 500, msg: 'Could not load the lots' }, null];
   }
@@ -138,13 +132,11 @@ const likePattern = text => `%${text.replace(/[\\%_]/g, character => `\\${charac
 export const listAccounts = async ({ search, owing = false, limit = 25, offset = 0 } = {}) => {
   if(hasNulByte(search)) return [{ code: 400, msg: 'Search cannot contain null characters' }, null];
 
-  const now = new Date().toISOString();
-  const live = sql`(${kempoCreditLot.remaining} < 0 or ${kempoCreditLot.expiresAt} is null or ${kempoCreditLot.expiresAt} > ${now}::timestamp)`;
   const totals = db.select({
     userId: kempoCreditLot.userId,
-    total: sql`coalesce(sum(${kempoCreditLot.remaining}) filter (where ${live}), 0)::bigint`.as('total'),
-    paid: sql`coalesce(sum(${kempoCreditLot.remaining}) filter (where ${live} and ${kempoCreditLot.kind} = 'paid'), 0)::bigint`.as('paid'),
-    promo: sql`coalesce(sum(${kempoCreditLot.remaining}) filter (where ${live} and ${kempoCreditLot.kind} = 'promo'), 0)::bigint`.as('promo'),
+    total: sql`coalesce(sum(${kempoCreditLot.remaining}), 0)::bigint`.as('total'),
+    paid: sql`coalesce(sum(${kempoCreditLot.remaining}) filter (where ${kempoCreditLot.kind} = 'paid'), 0)::bigint`.as('paid'),
+    promo: sql`coalesce(sum(${kempoCreditLot.remaining}) filter (where ${kempoCreditLot.kind} = 'promo'), 0)::bigint`.as('promo'),
     owed: sql`coalesce(-sum(${kempoCreditLot.remaining}) filter (where ${kempoCreditLot.remaining} < 0), 0)::bigint`.as('owed'),
     lastActivity: sql`max(${kempoCreditLot.updatedAt})`.mapWith(kempoCreditLot.updatedAt).as('lastActivity'),
   }).from(kempoCreditLot).groupBy(kempoCreditLot.userId).as('totals');
@@ -207,9 +199,7 @@ export const listAccounts = async ({ search, owing = false, limit = 25, offset =
   prepaid balance the site still has to honour — which is why they are reported apart.
 */
 export const creditTotals = async () => {
-  const now = new Date().toISOString();
-  const live = sql`(${kempoCreditLot.expiresAt} is null or ${kempoCreditLot.expiresAt} > ${now}::timestamp)`;
-  const held = sql`${kempoCreditLot.remaining} > 0 and ${live}`;
+  const held = sql`${kempoCreditLot.remaining} > 0`;
 
   try {
     const [row] = await db.select({
@@ -265,37 +255,9 @@ export const auditAccount = async ({ userId } = {}) => {
       }
     }
 
-    const balance = summarise(lots.filter(lot => lot.remaining !== 0), new Date(), await readConfig());
+    const balance = summarise(lots);
     return [null, { ok: !problems.length, lots: lots.length, entries: entries.length, balance, problems }];
   } catch {
     return [{ code: 500, msg: 'Could not audit the account' }, null];
   }
-};
-
-/*
-  Writes off every expired lot on the site, as `expiry` entries. Balances are right without it —
-  an expired lot is never counted — so this only brings the ledger into line, for a scheduled job to
-  run if a site wants its reports to show expiry on the day it happens. Each user is done under their
-  own lock, so it can run while the site is busy.
-*/
-export const expireLots = async ({ limit = 500 } = {}) => {
-  const now = new Date();
-
-  let users;
-  try {
-    users = await db.selectDistinct({ userId: kempoCreditLot.userId }).from(kempoCreditLot)
-      .where(and(gt(kempoCreditLot.remaining, 0), isNotNull(kempoCreditLot.expiresAt), lte(kempoCreditLot.expiresAt, now)))
-      .limit(Math.max(1, Number(limit) || 500));
-  } catch {
-    return [{ code: 500, msg: 'Could not look for expired credits' }, null];
-  }
-
-  let credits = 0;
-  for(const { userId } of users){
-    const [error, entries] = await withUserLocks([userId], async tx => [null, await expireDue(tx, userId, now)]);
-    if(error) return [error, null];
-    credits -= entries.reduce((sum, entry) => sum + entry.amount, 0);
-  }
-
-  return [null, { users: users.length, credits }];
 };

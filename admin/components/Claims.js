@@ -14,13 +14,11 @@ import { formatCredits, formatDate } from '/credits/utils/format.js';
   then.
 
   Each person can claim a link once. A limit caps the total, and holds however many people claim at
-  the same moment. The credits it gives can expire on a date, a number of days after each claim, or
-  never; separately, the link itself can stop working on a date.
+  the same moment. The link itself can stop working after a number of days; the credits it has given
+  never expire.
 */
 
-const blank = () => ({ name: '', amount: '', creditExpiry: 'never', creditDays: '', creditDate: '', linkDays: '', max: '' });
-
-const endOfDay = date => date ? new Date(`${date}T23:59:59`).toISOString() : undefined;
+const blank = () => ({ name: '', amount: '', linkDays: '', max: '' });
 
 export default class Claims extends ShadowComponent {
   static properties = {
@@ -81,8 +79,6 @@ export default class Claims extends ShadowComponent {
     const [error, result] = await createClaim({
       name: this.form.name || undefined,
       amount: number(this.form.amount),
-      lotExpiresInDays: this.form.creditExpiry === 'days' ? number(this.form.creditDays) : undefined,
-      lotExpiresAt: this.form.creditExpiry === 'date' ? endOfDay(this.form.creditDate) : undefined,
       expiresInDays: number(this.form.linkDays),
       maxRedemptions: number(this.form.max),
     });
@@ -147,23 +143,6 @@ export default class Claims extends ShadowComponent {
           <label class="span-3 m-span-6 px"><span class="d-b">Limit <span class="tc-muted">blank for none</span></span>
             <input type="number" min="1" step="1" .value=${form.max} @input=${event => this.set('max', event.target.value)} />
           </label>
-          <label class="span-4 m-span-12 px"><span class="d-b">The credits expire</span>
-            <select @change=${event => this.set('creditExpiry', event.target.value)}>
-              <option value="never" ?selected=${form.creditExpiry === 'never'}>Never</option>
-              <option value="days" ?selected=${form.creditExpiry === 'days'}>Some days after each claim</option>
-              <option value="date" ?selected=${form.creditExpiry === 'date'}>On a date</option>
-            </select>
-          </label>
-          ${form.creditExpiry === 'days' ? html`
-            <label class="span-4 m-span-12 px"><span class="d-b">Days after claiming</span>
-              <input type="number" required min="1" step="1" .value=${form.creditDays} @input=${event => this.set('creditDays', event.target.value)} />
-            </label>
-          ` : nothing}
-          ${form.creditExpiry === 'date' ? html`
-            <label class="span-4 m-span-12 px"><span class="d-b">Expiry date</span>
-              <input type="date" required .value=${form.creditDate} @input=${event => this.set('creditDate', event.target.value)} />
-            </label>
-          ` : nothing}
           <label class="span-4 m-span-12 px"><span class="d-b">The link stops working after <span class="tc-muted">days, blank for never</span></span>
             <input type="number" min="1" step="1" .value=${form.linkDays} @input=${event => this.set('linkDays', event.target.value)} />
           </label>
@@ -184,7 +163,7 @@ export default class Claims extends ShadowComponent {
     return html`
       <div class="table-wrapper">
         <table>
-          <thead><tr><th>Link</th><th class="ta-right">Credits</th><th>Claimed</th><th>Credits expire</th><th>Link expires</th><th></th></tr></thead>
+          <thead><tr><th>Link</th><th class="ta-right">Credits</th><th>Claimed</th><th>Link stops working</th><th></th></tr></thead>
           <tbody>
             ${this.claims.map(claim => {
               const expired = claim.expiresAt && new Date(claim.expiresAt) <= new Date();
@@ -197,7 +176,6 @@ export default class Claims extends ShadowComponent {
                   </td>
                   <td class="ta-right">${formatCredits(claim.amount)}</td>
                   <td>${claim.redemptions}${claim.maxRedemptions ? ` of ${claim.maxRedemptions}` : ''}</td>
-                  <td>${claim.lotExpiresAt ? formatDate(claim.lotExpiresAt) : claim.lotExpiresInDays ? `${claim.lotExpiresInDays} days after claiming` : 'Never'}</td>
                   <td>${claim.expiresAt ? formatDate(claim.expiresAt) : 'Never'}</td>
                   <td>
                     ${!claim.enabled ? html`<span class="tc-muted mr">Off</span>` : expired ? html`<span class="tc-muted mr">Expired</span>` : usedUp ? html`<span class="tc-muted mr">Used up</span>` : html`<span class="tc-success mr">Live</span>`}

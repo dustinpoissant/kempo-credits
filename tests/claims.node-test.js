@@ -30,23 +30,17 @@ export default {
     pass('');
   },
 
-  'redeeming grants promo credits with the link’s expiry, relative or fixed': async ({ pass, fail }) => {
-    const [, relative] = await createClaim({ amount: 50, lotExpiresInDays: 7 });
-    const fixedAt = new Date(Date.now() + 20 * DAY);
-    const [, fixed] = await createClaim({ amount: 30, lotExpiresAt: fixedAt });
+  'redeeming grants promo credits, which never expire': async ({ pass, fail }) => {
+    const [, link] = await createClaim({ amount: 50, expiresInDays: 7 });
     const user = freshUser();
 
-    const [error, redeemed] = await redeemClaim({ token: relative.token, userId: user });
+    const [error, redeemed] = await redeemClaim({ token: link.token, userId: user });
     if(error) return fail(error.msg);
     if(redeemed.lot.kind !== 'promo' || redeemed.lot.amount !== 50) return fail(`granted ${redeemed.lot.kind} ${redeemed.lot.amount}`);
-    const days = (new Date(redeemed.lot.expiresAt) - Date.now()) / DAY;
-    if(days < 6.9 || days > 7.1) return fail(`a 7-day claim expires in ${days} days`);
-
-    const [, second] = await redeemClaim({ token: fixed.token, userId: user });
-    if(new Date(second.lot.expiresAt).getTime() !== fixedAt.getTime()) return fail('the fixed expiry was not kept');
+    if('expiresAt' in redeemed.lot) return fail('the credits carry an expiry');
 
     const [, balance] = await getBalance({ userId: user });
-    if(balance.promo !== 80 || balance.paid !== 0) return fail(`balance ${JSON.stringify(balance)}`);
+    if(balance.promo !== 50 || balance.paid !== 0) return fail(`balance ${JSON.stringify(balance)}`);
     const problem = await invariant(user);
     if(problem) return fail(problem);
     pass('');
@@ -106,12 +100,17 @@ export default {
     pass('');
   },
 
-  'a link whose credits would expire before it does is refused': async ({ pass, fail }) => {
-    const [error] = await createClaim({ amount: 5, expiresInDays: 30, lotExpiresAt: new Date(Date.now() + 5 * DAY) });
-    if(error?.code !== 400) return fail(`gave ${error?.code ?? 'success'}`);
+  'a link cannot give credits that expire, though the link itself can stop working': async ({ pass, fail }) => {
+    for(const extra of [{ lotExpiresInDays: 3 }, { lotExpiresAt: new Date(Date.now() + 5 * DAY) }]){
+      const [error] = await createClaim({ amount: 5, ...extra });
+      if(error?.code !== 400 || !/do not expire/.test(error.msg)) return fail(`${JSON.stringify(extra)} gave ${JSON.stringify(error)}`);
+    }
 
-    const [both] = await createClaim({ amount: 5, lotExpiresInDays: 3, lotExpiresAt: new Date(Date.now() + 5 * DAY) });
-    if(both?.code !== 400) return fail('two expiries for the credits were accepted');
+    const [linkError, link] = await createClaim({ amount: 5, expiresInDays: 30 });
+    if(linkError) return fail(`a link that stops working in 30 days was refused: ${linkError.msg}`);
+    const days = (new Date(link.claim.expiresAt) - Date.now()) / DAY;
+    if(days < 29.9 || days > 30.1) return fail(`the link stops working in ${days} days`);
+
     const [noAmount] = await createClaim({ amount: 0 });
     if(noAmount?.code !== 400) return fail('a zero-credit link was accepted');
     pass('');

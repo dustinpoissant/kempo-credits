@@ -15,18 +15,21 @@ import { pgTable, text, boolean, integer, jsonb, timestamp, uniqueIndex, index }
 /*
   One grant of credits: how many, how many are left, and where they came from.
 
-  A balance is the sum of `remaining` over a user's live lots, and it can be worked out from this
-  table alone at any time. Nothing caches it, so nothing can disagree with it.
+  A balance is the sum of `remaining` over a user's lots, and it can be worked out from this table
+  alone at any time. Nothing caches it, so nothing can disagree with it.
+
+  **Credits never expire**, paid or promo — the site owner's rule. There is deliberately no expiry
+  column, so there is nothing for any code path to set.
 
   `kind` is `paid` or `promo`, and the two are kept apart because they are different things. Paid
-  credits were bought; they are a prepaid balance, they never expire unless the site has chosen to
-  say otherwise, and they are what a refund claws back. Promo credits were given away; they are not
-  revenue and may expire.
+  credits were bought; they are a prepaid balance, and what a refund of the purchase takes back.
+  Promo credits were given away; they are not revenue and are never refunded as money.
 
-  `remaining` can go below zero, and that is the one way a balance can. When a refunded purchase is
-  clawed back after some of it was spent, the part that could not be taken back is recorded against
-  that lot as a shortfall — so the lot, and the user's balance, show exactly what they owe. Any
-  credits granted to them afterwards pay it off first. See server/utils/ledger/clawback.js.
+  `remaining` can go below zero, and that is the one way a balance can: a refund that bypassed the
+  site's own check (made in the processor's dashboard, or a chargeback) taking back more than the
+  user still held. The part that could not be taken is recorded against the lot as a shortfall, so
+  the balance shows exactly what is owed, and credits granted afterwards pay it off first. See
+  server/utils/ledger/clawback.js.
 */
 export const kempoCreditLot = pgTable('kempoCreditLot', {
   id: text('id').primaryKey(),
@@ -35,7 +38,6 @@ export const kempoCreditLot = pgTable('kempoCreditLot', {
   kind: text('kind').notNull(),
   amount: integer('amount').notNull(),
   remaining: integer('remaining').notNull(),
-  expiresAt: timestamp('expiresAt'),
 
   /*
     Why it was granted, in the granting code's words (`purchase`, `claim`, `award`, `monthly`), and
@@ -76,12 +78,16 @@ export const kempoCreditLot = pgTable('kempoCreditLot', {
   | `grant`       | +    | the lot being created                                                 |
   | `spend`       | -    | credits used on something                                             |
   | `reversal`    | +    | a spend undone, returned to the lot it came from                      |
-  | `clawback`    | -    | what was left of a refunded grant, taken back                         |
-  | `shortfall`   | -    | the part of a refunded grant already spent: the lot goes below zero  |
+  | `clawback`    | -    | credits taken back by a refund — from the purchase's own lot first,   |
+  |               |      | then from the user's other credits                                    |
+  | `shortfall`   | -    | what a refund could not take back: the lot goes below zero            |
   | `settlement`  | ±    | credits moved from a positive lot to pay off a negative one           |
   | `removal`     | -    | an administrator taking credits away                                  |
   | `forgiveness` | +    | an administrator writing off what a user owes                         |
-  | `expiry`      | -    | an expired lot's remaining credits, written off                       |
+
+  `reversesOperationId` points a reversal at the spend it undoes, and a claw back at the grant it
+  takes back — which is how a refund knows how much of a purchase is already back, wherever it came
+  from.
 
   For every lot, `remaining` equals the sum of its entries. That is checked after every operation in
   the tests and by `auditAccount`.
@@ -205,9 +211,7 @@ export const kempoCreditPurchase = pgTable('kempoCreditPurchase', {
   that leaks must not be a way to mint credits. `tokenHint` is the last few characters, so an
   administrator can tell two links apart.
 
-  The credits a redemption grants expire either on a fixed date (`lotExpiresAt`) or a number of days
-  after the redemption (`lotExpiresInDays`), or never — whichever the administrator chose. The link
-  itself expires separately, at `expiresAt`.
+  `expiresAt` is when the *link* stops working. The credits it has already granted never expire.
 */
 export const kempoCreditClaim = pgTable('kempoCreditClaim', {
   id: text('id').primaryKey(),
@@ -216,8 +220,6 @@ export const kempoCreditClaim = pgTable('kempoCreditClaim', {
   name: text('name'),
 
   amount: integer('amount').notNull(),
-  lotExpiresAt: timestamp('lotExpiresAt'),
-  lotExpiresInDays: integer('lotExpiresInDays'),
 
   expiresAt: timestamp('expiresAt'),
   maxRedemptions: integer('maxRedemptions'),

@@ -9,7 +9,7 @@ It knows nothing about what credits are spent *on*. That is the consumer's busin
 `spendCredits` with its own reference, and keeps its own record of what was bought.
 
 - **Paid and promo credits are kept apart.** Bought credits are a prepaid balance; promo credits are
-  a gift that may expire. Promo is spent first when both would expire together.
+  a gift. Promo is spent first. **No credit ever expires.**
 - **Safe to retry, safe under load.** Every operation takes an idempotency key, and two requests
   racing for the last credits cannot both get them.
 - **Packs are bought through [kempo-payments](https://github.com/dustinpoissant/kempo-payments)**,
@@ -17,6 +17,8 @@ It knows nothing about what credits are spent *on*. That is the consumer's busin
   credits are granted on the payment processor's word — never the browser's.
 - **Card-testing protection** on the purchase flow: rate limits, a decline cool-down, and a log of
   every refused attempt.
+- **Spent credits are never refunded.** A purchase is refundable only as far as the buyer still
+  holds its credits; see [Refunds](#refunds-shortfalls-and-disputes).
 - **Credits are never redeemable for money**, by anyone. See [Not in scope](#not-in-scope).
 
 ## Contents
@@ -64,7 +66,7 @@ Nothing can be bought until there is a pack: add one under **Admin → Credits �
 
 | | |
 |---|---|
-| **Lot** | One grant of credits: how many, how many are left, `paid` or `promo`, an optional expiry, and where it came from. A balance is the sum of a user's live lots. |
+| **Lot** | One grant of credits: how many, how many are left, `paid` or `promo`, and where it came from. A balance is the sum of a user's lots. |
 | **Entry** | One immutable ledger row: a signed amount against a lot, with a reason, a `reference` and who did it. An operation that touches several lots writes one entry per lot, sharing an `operationId`. Entries are never updated or deleted. |
 | **Pack** | Something to buy: this many credits for this much money, set by an administrator. |
 | **Purchase** | One attempt to buy a pack: the pack as it was, the payment, the tax quote and, once paid, the lot it granted. Refused attempts are kept too — that is the abuse log. |
@@ -74,23 +76,25 @@ Nothing can be bought until there is a pack: add one under **Admin → Credits �
 
 They are different things and stay different:
 
-- **Paid** credits were bought. They are a prepaid balance the site owes its users, they are what a
-  refund takes back, and they **never expire** unless the site turns on `paid_credits_expire` —
-  which is off by default, with a warning beside it, because expiring a prepaid balance is restricted
-  by consumer-protection and unclaimed-property law in many places. Take advice first.
-- **Promo** credits were given away. They are not revenue, are not refundable as money, and may
-  expire — on a fixed date or a number of days after the grant, whichever the grant says.
+- **Paid** credits were bought. They are a prepaid balance the site owes its users, and they are what
+  a refund of the purchase takes back.
+- **Promo** credits were given away — by an administrator, a claim link, an allowance. They are not
+  revenue and are never refunded as money.
+
+**No credit ever expires**, paid or promo. There is no expiry on a lot, no setting for one, and a
+grant or claim link that asks for one is refused. (A claim *link* can stop working after a date; the
+credits it has already given never do.)
 
 ### Spending order
 
-Credits are spent from the lot that **expires soonest**; when two expire together (or never),
-**promo before paid**; after that, oldest first. A user never loses promo credits to expiry while
-bought ones are drawn. Each spend's entries record which lots it drew from, so a reversal puts every
-credit back where it came from.
+Promo credits are spent **before paid** ones, and within each, **oldest first**. Bought credits are
+therefore the last to go, so they stay refundable for as long as possible. Each spend's entries record
+which lots it drew from, so a reversal puts every credit back where it came from.
 
 ### A balance can go below zero — once
 
-Only one thing takes a balance negative: a **refund of credits that were already spent**. See
+Only one thing takes a balance negative: a refund made somewhere this site cannot stop — Stripe's
+dashboard, or a chargeback — taking back credits the user no longer holds. See
 [Refunds, shortfalls and disputes](#refunds-shortfalls-and-disputes).
 
 ## Using credits from your own code
@@ -103,7 +107,7 @@ import { getBalance, spendCredits, reverseSpend, grantCredits } from 'kempo-cred
 
 // What does this user have?
 const [, balance] = await getBalance({ userId });
-// { total: 420, paid: 300, promo: 120, owed: 0, expiringSoon: 20, nextExpiresAt: Date }
+// { total: 420, paid: 300, promo: 120, owed: 0 }
 
 // Charge them for something.
 const [error, spent] = await spendCredits({
@@ -115,8 +119,8 @@ const [error, spent] = await spendCredits({
 });
 
 if(error?.code === 402){
-  // Not enough. error.balance and error.needed say by how much — or error.owed, if a refund
-  // left them owing and they cannot spend at all until that is covered.
+  // Not enough. error.balance and error.needed say by how much — or error.owed, if a refund made
+  // outside the site left them owing and they cannot spend at all until that is covered.
 }
 
 // The thing they paid for fell through: give the credits back, to the lots they came from.
@@ -128,7 +132,6 @@ await grantCredits({
   userId,
   amount: 100,
   kind: 'promo',
-  expiresInDays: 31,
   reason: 'monthly',
   idempotencyKey: `monthly:${userId}:2026-10`,
 });
@@ -151,18 +154,17 @@ Imported from `kempo-credits/sdk`.
 
 | Function | Does |
 |---|---|
-| `getBalance({ userId })` | `{ total, paid, promo, owed, expiringSoon, nextExpiresAt }`. `total` is what can be spent; it is below zero only when `owed` is not zero. |
-| `grantCredits({ userId, amount, kind, expiresAt?, expiresInDays?, reason, reference?, idempotencyKey, actorId?, note? })` | Creates a lot and its entry. `kind` is `paid` or `promo`; paid credits take their expiry from the site's setting, never the caller. If the user owes credits, the grant pays that off first (`settled`). |
+| `getBalance({ userId })` | `{ total, paid, promo, owed }`. `total` is what can be spent; it is below zero only when `owed` is not zero. |
+| `grantCredits({ userId, amount, kind, reason, reference?, idempotencyKey, actorId?, note? })` | Creates a lot and its entry. `kind` is `paid` or `promo`. Passing an expiry is refused: credits do not expire. If the user owes credits, the grant pays that off first (`settled`). |
 | `spendCredits({ userId, amount, reason, reference, idempotencyKey, actorId?, note? })` | Takes credits in spending order. **402** if short; never goes negative; never partly spends. |
-| `reverseSpend({ userId, idempotencyKey, reason?, actorId?, note? })` | Returns what the spend under that key took, to the same lots. Credits returned to a lot that has expired since expire again (`expired` says how many). |
-| `clawBackGrant({ lotId \| reference, amount?, reason?, idempotencyKey?, actorId?, note? })` | Takes back a grant, or `amount` of it. What was already spent becomes a **shortfall**; see below. Reports `taken`, `shortfall`, `settled`, `owed`. |
+| `reverseSpend({ userId, idempotencyKey, reason?, actorId?, note? })` | Returns what the spend under that key took, to the same lots — bought credits back to the purchase they came from, which makes it refundable again. |
+| `clawBackGrant({ lotId \| reference, amount?, reason?, idempotencyKey?, actorId?, note? })` | Takes back a grant, or `amount` of it, without moving any money: from its own lot first, then the user's other credits. What neither covers is a **shortfall**; see below. Reports `taken`, `fromOtherCredits`, `shortfall`, `owed`. |
 | `removeCredits({ userId, amount, note, idempotencyKey, actorId? })` | An administrator taking credits away, in spending order, never more than they have. |
 | `forgiveDebt({ userId, amount?, note, idempotencyKey, actorId? })` | Writes off what a user owes — all of it, or `amount`. |
 | `listEntries({ userId, type?, reference?, limit?, offset? })` | The ledger, newest first. |
 | `listLots({ userId })`, `getLot({ lotId })`, `getOperation({ operationId })` | Reads. |
 | `listAccounts({ search?, owing?, limit?, offset? })`, `creditTotals()` | Balances across users, and site-wide totals. |
 | `auditAccount({ userId })` | Proves a balance from the ledger: every lot's `remaining` equals the sum of its entries. `{ ok, problems }`. |
-| `expireLots()` | Writes off expired lots for everybody, as `expiry` entries. Balances are right without it; it brings the ledger in line, for a scheduled job. |
 
 ### Packs, purchases and claim links
 
@@ -171,8 +173,10 @@ Imported from `kempo-credits/sdk`.
 | `listPacks({ enabledOnly? })`, `getPack`, `createPack`, `updatePack`, `deletePack` | The packs for sale. A pack that has been bought can be disabled, not deleted. |
 | `startPurchase({ userId, packId, address?, ip?, userAgent?, email? })` | Prices the pack (with tax if kempo-tax is on), checks the abuse limits, records what the buyer is shown, and opens a payment. Returns `{ purchase, clientSecret, shown }`. |
 | `getPurchase`, `listPurchases`, `purchaseSummary` | Reads. |
+| `refundableFor({ purchaseId })` | What can be refunded now: `{ credits, amount, held, claimable, spent }` — never more credits than the buyer still holds. |
+| `refundPurchase({ purchaseId, amount?, reason, issuedBy? })` | Refunds through kempo-payments, up to `refundableFor` (all of it when no amount is given); refuses more with a 409. The credits are taken back when the processor confirms. |
 | `reconcilePurchase({ purchaseId })` | Asks the processor about a purchase's payment and applies the answer — for a webhook that never came. Idempotent. |
-| `createClaim({ name?, amount, lotExpiresAt? \| lotExpiresInDays?, expiresAt? \| expiresInDays?, maxRedemptions? })` | Makes a claim link. The token is returned **once**; only its hash is stored. |
+| `createClaim({ name?, amount, expiresAt? \| expiresInDays?, maxRedemptions? })` | Makes a claim link; `expiresAt`/`expiresInDays` is when the *link* stops working. The token is returned **once**; only its hash is stored. |
 | `previewClaim({ token, userId? })`, `redeemClaim({ token, userId })`, `listClaims`, `setClaimEnabled` | |
 
 ## Hooks
@@ -191,7 +195,7 @@ handlers in your own `kempo-config.json`:
 | `credits:granted` | `{ userId, operationId, lot, amount, kind, reason, reference, settled, balance }` | credits were added — bought, given or claimed |
 | `credits:spent` | `{ userId, operationId, amount, reason, reference, entries, balance }` | credits were spent |
 | `credits:reversed` | `{ userId, operationId, reversedOperationId, amount, reference, balance }` | a spend was undone |
-| `credits:clawed-back` | `{ userId, operationId, lot, taken, shortfall, settled, owed, balance }` | a grant was taken back, usually by a refund |
+| `credits:clawed-back` | `{ userId, operationId, lot, taken, shortfall, owed, balance }` | a grant was taken back, usually by a refund |
 | `credits:low` | `{ userId, balance, threshold }` | the balance dropped below `low_balance_threshold` — once per crossing |
 
 Each fires once per operation: a retry under the same key fires nothing.
@@ -219,27 +223,41 @@ the processor, so there is only ever one open payment per buyer to try cards aga
 
 ## Refunds, shortfalls and disputes
 
-A refund made anywhere — kempo-payments' admin or Stripe's dashboard — reaches this extension as
-kempo-payments' `payment:refunded`. The credits taken back are the refunded **share** of the pack,
-rounded up (refund half the money, lose half the credits), worked out from the payment's running
-total so partial refunds add up to exactly the pack. The tax is reversed with kempo-tax.
+**Spent credits are never refunded as money.** A purchase can be refunded only as far as the buyer
+still holds credits to give back: its credits not yet taken back, and no more than the buyer's
+balance. **Credits → Purchases** shows, for each purchase, how many of its credits are still held
+and how much money that is, and its **Refund** button refunds up to exactly that (it needs
+`payments:refund` as well as `credits:adjust`). The money goes back through the processor, and the
+credits are taken back when kempo-payments reports the refund — from the purchase's own credits first,
+then the buyer's other credits. The tax is reversed with kempo-tax. Partial refunds are worked out
+cumulatively, so they never add up to more than the credits they took back are worth.
 
-If some of those credits were already **spent**, they cannot be taken back. That part is the
+**When something was spent on a thing the buyer never received** — a glitch — put the credits back
+first, then refund:
+
+1. On the buyer's ledger (**Balances**), **Reverse** that spend. Its credits go back to the purchase
+   they came from. (Giving them credits with **Give promo credits** works too.)
+2. The purchase is refundable again; refund it from **Purchases**.
+
+The same rule guards **kempo-payments' own Refund button** (kempo-payments 0.1.10 and later fire a
+`payment:refunding` guard, and this extension refuses a refund of spent credits through it).
+
+What cannot be guarded is a refund made **in Stripe's own dashboard**, or a **chargeback** the site
+loses. If one takes back credits the buyer no longer holds, the part that could not be taken is the
 **shortfall**:
 
 - it is recorded as a `shortfall` entry that takes the lot, and the balance, below zero;
-- it is paid off straight away from any other credits the user holds;
-- whatever is still owed **blocks spending** until it is covered — by credits the user is granted
-  later (a purchase, a promo, which pay off the debt first) or by an administrator writing it off;
+- whatever is owed **blocks spending** until it is covered — by credits the user is granted later
+  (a purchase, a promo, which pay off the debt first) or by an administrator writing it off;
 - it fires `credits:clawed-back` with the figures, and **every user with `credits:view` is
   notified**, so nothing about it is silent.
 
-Without that, buying credits, spending them and refunding the payment would be a way to keep what was
-spent for free.
+Without that, buying credits, spending them and refunding outside the site would be a way to keep
+what was spent for free.
 
 **Disputes are not refunds.** A chargeback flags the purchase and notifies the administrators; nothing
-is taken back automatically, because the site may win it. **Claw back** on the purchase does it in
-one click if they decide to.
+is taken back automatically, because the site may win it. **Take them back without a refund** on the
+purchase does it in one click if they decide to.
 
 ## Abuse protection, and going live
 
@@ -318,6 +336,7 @@ and nothing else, and the user always comes from the session, never the request.
 | `GET /accounts`, `GET /accounts/:userId`, `GET /accounts/:userId/entries`, `GET /purchases`, `GET /purchases/:id`, `POST /purchases/:id/reconcile`, `GET /summary` | `credits:view` |
 | `POST /accounts/:userId/grant`, `GET /claims`, `POST /claims`, `PUT /claims/:id` | `credits:grant` |
 | `POST /accounts/:userId/remove`, `POST /accounts/:userId/forgive`, `POST /lots/:id/claw-back`, `POST /operations/:id/reverse` | `credits:adjust` |
+| `POST /purchases/:id/refund` `{ amount?, reason }` | `credits:adjust` and kempo-payments' `payments:refund` |
 | `GET /packs?all=1`, `POST /packs`, `PUT /packs/:id`, `DELETE /packs/:id` | `credits:packs` |
 | `GET /settings`, `PUT /settings` | `credits:settings` |
 
@@ -344,12 +363,9 @@ double click applies once. Each needs a `note`, which the ledger keeps.
 
 | Setting | Default | |
 |---|---|---|
-| `refund_policy` | *Credits have no cash value…* | Shown at checkout and recorded with each purchase. Say whether unspent credits can be refunded. |
+| `refund_policy` | *Credits have no cash value…* | Shown at checkout and recorded with each purchase. Say whether unspent credits can be refunded — spent ones never are. |
 | `tax_class` | `digital` | The kempo-tax class a pack is taxed as. |
 | `low_balance_threshold` | `0` | Fires `credits:low` below this. 0 is off. |
-| `expiring_soon_days` | `14` | How far ahead `expiringSoon` looks. |
-| `paid_credits_expire` | `false` | Whether bought credits expire. **Take advice first.** |
-| `paid_credits_expiry_days` | `365` | When they do, how long after the purchase. |
 | `purchase_limit_per_user` | `10` | Purchase attempts per account per hour. |
 | `purchase_limit_per_ip` | `20` | …per IP address per hour. |
 | `purchase_limit_global` | `500` | …for the whole site per hour. Raise it before a launch. |
@@ -366,7 +382,8 @@ double click applies once. Each needs a `note`, which the ledger keeps.
   reverse and write off from there.
 - **Give credits** — find a user and give them promo credits, seeing what they already have.
 - **Purchases** — every purchase and every refused attempt; one purchase shows what the buyer was
-  shown, the payment, and the credits it granted. *Check with the payment processor* fixes one whose
+  shown, the payment, the credits it granted, and how much of it can be refunded, with a **Refund**
+  button for exactly that. *Check with the payment processor* fixes one whose
   webhook never came.
 - **Packs**, **Claim links**, **Settings**.
 
@@ -377,8 +394,9 @@ double click applies once. Each needs a `note`, which the ledger keeps.
 - **Cash value.** Credits are never redeemable for money, by anyone. That is what keeps them a
   closed-loop prepaid balance rather than stored value subject to money-transmission rules. There is
   no cash-out path, and one should not be added without the site owner deciding it deliberately.
-- **Transfers between users.** Not built; an operation can already span lots, so a transfer is two
-  users' entries under one `operationId` when it is wanted.
+- **Transfers between users.** Not built yet — no gifting or trading of credits. The ledger is ready
+  for it: an operation can already lock several users at once, and a transfer is entries on two
+  users under one `operationId`.
 - **Subscriptions.** Recurring billing needs Stripe Billing in kempo-payments. A monthly *grant* is
   already one call — see the example above.
 - **Tax rules.** kempo-tax decides; this calls it.

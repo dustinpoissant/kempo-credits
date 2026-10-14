@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { deleteSetting, setSetting } from 'kempo/server/sdk.js';
 import { kempoCreditPack } from '../server/db/schema.js';
 import spendCredits from '../server/utils/ledger/spend.js';
+import { getBalance } from '../server/utils/ledger/read.js';
 import { integrationOnly, integrationTier, db } from './helpers/db.js';
 import { purge } from './helpers/ledger.js';
 import { purgePayments } from './helpers/payments.js';
@@ -332,10 +333,8 @@ const tests = {
     const limit = saved.data.settings.find(setting => setting.name === 'purchase_limit_per_user');
     if(limit.value !== 7) return fail(`saved as ${limit.value}`);
 
-    await settings.getByLabel('Bought credits expire', { exact: true }).check();
-    await settings.getByText('Take advice before turning this on').waitFor();
-    await shot(page, 'admin-settings-warning');
-    await settings.getByLabel('Bought credits expire', { exact: true }).uncheck();
+    await settings.getByText('Credits never expire, bought or promo.').waitFor();
+    await shot(page, 'admin-settings-saved');
 
     const typo = await call(state.server.base, 'PUT', '/credits/api/settings', { token: state.tokens.admin, body: { purchase_limit_per_usr: 3 } });
     if(typo.status !== 400) return fail(`a misspelt setting gave ${typo.status}`);
@@ -383,40 +382,72 @@ const tests = {
   },
 
   /*
-    The refund is a real one, made through kempo-payments' own refund route, so it is Stripe that
-    gives the money back and kempo-payments that fires payment:refunded into this extension.
+    The site owner's flow, against Stripe: credits were spent on something that never arrived, so the
+    purchase can only be refunded for what is left; an administrator puts the spent credits back by
+    reversing that spend on the buyer's ledger, and the rest becomes refundable. Both refunds are real
+    ones at Stripe, made from the purchase's Refund panel, and the credits come back when kempo-payments
+    fires payment:refunded.
   */
-  'a refund made in Payments takes the credits back, and what was already spent is owed': async ({ pass, fail }) => {
+  'a refund from Credits gives back only what the buyer still holds, and the rest once it is put back': async ({ pass, fail }) => {
     if(!stripe) return pass(NO_STRIPE);
 
-    await spendCredits({ userId: state.ids.buyer, amount: 200, reason: 'feature', reference: { owner: 'browser-suite', ref: 'boost-1' }, idempotencyKey: 'browser-suite-boost-1' });
-
+    await spendCredits({ userId: state.ids.buyer, amount: 200, reason: 'boost', reference: { owner: 'browser-suite', ref: 'boost-1' }, idempotencyKey: 'browser-suite-boost-1' });
     const mine = await call(state.server.base, 'GET', '/credits/api/my/purchases', { token: state.tokens.buyer });
     const paid = mine.data.purchases.find(purchase => purchase.status === 'paid');
     if(!paid) return fail('no paid purchase to refund');
-    const detail = await call(state.server.base, 'GET', `/credits/api/purchases/${paid.id}`, { token: state.tokens.admin });
-
-    const refund = await call(state.server.base, 'POST', `/payments/api/payments/${detail.data.payment.id}/refund`, { token: state.tokens.admin, body: { reason: 'browser suite' } });
-    if(refund.status !== 200) return fail(`the refund was refused: ${refund.status} ${JSON.stringify(refund.data)}`);
-
-    const balance = await poll(async () => {
-      const { data } = await call(state.server.base, 'GET', '/credits/api/my/balance', { token: state.tokens.buyer });
-      return data.balance.total === -200 ? data.balance : null;
-    });
-    if(!balance) return fail('the buyer’s balance never reached -200 (500 granted, 200 spent, all refunded)');
-    if(balance.owed !== 200) return fail(`owes ${balance.owed}`);
-
-    const after = await call(state.server.base, 'GET', `/credits/api/purchases/${paid.id}`, { token: state.tokens.admin });
-    if(after.data.purchase.status !== 'refunded' || after.data.purchase.shortfall !== 200) {
-      return fail(`the purchase is ${after.data.purchase.status} with a shortfall of ${after.data.purchase.shortfall}`);
-    }
 
     const page = await newPage('admin');
-    await page.goto(`${state.server.base}/admin/extension/kempo-credits/?tab=purchases&purchase=${paid.id}`);
-    await page.locator('k-cred-purchases').getByText('had already been spent').waitFor();
-    await shot(page, 'admin-purchase-refunded');
+    const purchases = page.locator('k-cred-purchases');
+    const openPurchase = async () => {
+      await page.goto(`${state.server.base}/admin/extension/kempo-credits/?tab=purchases&purchase=${paid.id}`);
+      await purchases.getByText('What the buyer was shown').waitFor();
+    };
+    const refundAll = async (expected, reason) => {
+      await purchases.getByText(`up to ${expected}`).waitFor();
+      await purchases.getByRole('button', { name: 'Refund…' }).click();
+      await purchases.getByLabel('Why (required)').fill(reason);
+      await purchases.getByRole('button', { name: 'Refund', exact: true }).click();
+      await purchases.getByText(`Refunded ${expected}.`).waitFor({ timeout: 30000 });
+    };
+    const balance = async total => poll(async () => {
+      const { data } = await call(state.server.base, 'GET', '/credits/api/my/balance', { token: state.tokens.buyer });
+      return data.balance.total === total ? data.balance : null;
+    });
+
+    // 300 of the 500 credits are left, so $2.99 of $4.99 can go back.
+    await openPurchase();
+    await shot(page, 'admin-refund-partial');
+    await refundAll('$2.99', 'Unused credits');
+    if(!await balance(0)) return fail('the 300 unspent credits were not taken back');
+
+    await openPurchase();
+    await purchases.getByText('All of its credits have been spent').waitFor();
+    await shot(page, 'admin-refund-blocked');
+
+    // The boost never ran: put its 200 credits back where they came from.
+    await page.goto(`${state.server.base}/admin/extension/kempo-credits/?user=${state.ids.buyer}`);
+    const account = page.locator('k-cred-account');
+    await account.getByRole('button', { name: 'Reverse' }).first().click();
+    await account.getByLabel('Why (required').fill('The boost never ran');
+    await account.locator('form').getByRole('button', { name: 'Reverse' }).click();
+    await account.getByText('Done.').waitFor();
+    if(!await balance(200)) return fail('reversing the spend did not give the 200 credits back');
+
+    await openPurchase();
+    await refundAll('$2.00', 'The boost never ran');
+    const finalBalance = await balance(0);
+    if(!finalBalance || finalBalance.owed !== 0) return fail(`ended at ${JSON.stringify(finalBalance)}`);
+
+    const after = await call(state.server.base, 'GET', `/credits/api/purchases/${paid.id}`, { token: state.tokens.admin });
+    const { purchase, payment } = after.data;
+    if(purchase.status !== 'refunded' || purchase.shortfall !== 0 || payment.amountRefunded !== 499) {
+      return fail(`purchase ${purchase.status}, shortfall ${purchase.shortfall}, ${payment.amountRefunded} refunded at Stripe`);
+    }
+    await page.reload();
+    await purchases.getByText('$4.99 refunded · 500 credits taken back').waitFor();
+    await shot(page, 'admin-refund-done');
     await page.context().close();
-    pass('');
+    pass('$2.99, then $2.00 once the spend was reversed; nothing owed');
   },
 
   'with kempo-tax installed, the buyer gives an address and pays the tax as well': async ({ pass, fail }) => {
@@ -452,6 +483,46 @@ const tests = {
     if(detail.data.payment.amountCaptured !== 529) return fail(`Stripe took ${detail.data.payment.amountCaptured}, not 529`);
     if(!detail.data.purchase.taxTransactionId) return fail(`the sale is not in the tax ledger: ${detail.data.purchase.taxError}`);
     pass('charged $5.29 at Stripe and recorded in kempo-tax');
+  },
+
+  /*
+    The Payments screen's own Refund button, for a purchase whose credits are partly spent. From
+    kempo-payments 0.1.10 its guard refuses it; on an earlier kempo-payments, which this suite may be
+    running against, it goes through, and the buyer owes exactly what it could not take back — the
+    same as a refund made in Stripe's dashboard.
+  */
+  'a refund from the Payments screen cannot take back spent credits either': async ({ pass, fail }) => {
+    if(!stripe) return pass(NO_STRIPE);
+
+    const mine = await call(state.server.base, 'GET', '/credits/api/my/purchases', { token: state.tokens.member });
+    const taxed = mine.data.purchases.find(purchase => purchase.status === 'paid');
+    if(!taxed) return fail('no paid purchase from the tax case');
+    const [, before] = await getBalance({ userId: state.ids.member });
+    await spendCredits({ userId: state.ids.member, amount: before.promo + 20, reason: 'boost', reference: { owner: 'browser-suite', ref: 'boost-2' }, idempotencyKey: 'browser-suite-boost-2' });
+
+    const detail = await call(state.server.base, 'GET', `/credits/api/purchases/${taxed.id}`, { token: state.tokens.admin });
+    const refund = await call(state.server.base, 'POST', `/payments/api/payments/${detail.data.payment.id}/refund`, { token: state.tokens.admin, body: { reason: 'browser suite' } });
+
+    if(refund.status === 409){
+      if(!/spent/.test(refund.data.error)) return fail(`refused, but not by the credits guard: ${refund.data.error}`);
+      return pass('refused by the guard');
+    }
+    if(refund.status !== 200) return fail(`the refund failed: ${refund.status} ${JSON.stringify(refund.data)}`);
+
+    const owed = await poll(async () => {
+      const { data } = await call(state.server.base, 'GET', '/credits/api/my/balance', { token: state.tokens.member });
+      return data.balance.owed === 20 ? data.balance : null;
+    });
+    if(!owed) return fail('the 20 spent credits it could not take back are not owed');
+    const after = await call(state.server.base, 'GET', `/credits/api/purchases/${taxed.id}`, { token: state.tokens.admin });
+    if(after.data.purchase.shortfall !== 20) return fail(`the purchase records a shortfall of ${after.data.purchase.shortfall}`);
+
+    const page = await newPage('admin');
+    await page.goto(`${state.server.base}/admin/extension/kempo-credits/?tab=purchases&purchase=${taxed.id}`);
+    await page.locator('k-cred-purchases').getByText('had already been spent').waitFor();
+    await shot(page, 'admin-purchase-owing');
+    await page.context().close();
+    pass('kempo-payments without the guard: refunded, and the 20 spent credits are owed');
   },
 
   /*

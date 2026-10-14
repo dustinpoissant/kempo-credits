@@ -38,7 +38,7 @@ export const purge = async () => {
 /*
   The invariant the plan names, checked after every operation a suite makes: each lot's `remaining`
   is the sum of its entries, each lot was opened by one grant of its amount, and the balance is the
-  sum of the live lots. Returns the problem as text, or null.
+  sum of the lots. Returns the problem as text, or null.
 */
 export const invariant = async userId => {
   const [error, audit] = await auditAccount({ userId });
@@ -49,11 +49,8 @@ export const invariant = async userId => {
   if(balanceError) return `balance failed: ${balanceError.msg}`;
 
   const lots = await db.select().from(kempoCreditLot).where(eq(kempoCreditLot.userId, userId));
-  const now = Date.now();
-  const sum = lots
-    .filter(lot => lot.remaining < 0 || !lot.expiresAt || new Date(lot.expiresAt).getTime() > now)
-    .reduce((total, lot) => total + lot.remaining, 0);
-  if(balance.total !== sum) return `balance says ${balance.total} but the live lots add up to ${sum}`;
+  const sum = lots.reduce((total, lot) => total + lot.remaining, 0);
+  if(balance.total !== sum) return `balance says ${balance.total} but the lots add up to ${sum}`;
   if(balance.paid + balance.promo !== balance.total) return `paid ${balance.paid} + promo ${balance.promo} is not the total ${balance.total}`;
 
   return null;

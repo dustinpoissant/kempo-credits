@@ -1,7 +1,7 @@
 import { readConfig } from '../config/settings.js';
 import newId from '../ids.js';
 import { crossedLow, fire } from './events.js';
-import { balanceIn, expireDue, findOperation, spendableLots, takeInOrder, writeOperation } from './lots.js';
+import { balanceIn, findOperation, spendableLots, takeInOrder, writeOperation } from './lots.js';
 import { abort, withUserLocks } from './transaction.js';
 import { cleanAmount, cleanKey, cleanReference, cleanText, cleanUserId } from './validate.js';
 
@@ -25,8 +25,8 @@ import { cleanAmount, cleanKey, cleanReference, cleanText, cleanUserId } from '.
   Spending twice under one key spends once and returns the first spend (`duplicate: true`), so a
   feature can retry freely. Keep the key — `reverseSpend` takes it to give the credits back.
 
-  Credits come out of the lot that expires soonest, promo before paid when they expire together,
-  and the entries record which lots they came out of.
+  Credits come out of promo lots before paid ones, oldest first, and the entries record which lots
+  they came out of.
 */
 export default async ({ userId, amount, reason, reference, idempotencyKey, actorId = null, note = null } = {}) => {
   const [userError, user] = cleanUserId(userId);
@@ -53,12 +53,11 @@ export default async ({ userId, amount, reason, reference, idempotencyKey, actor
       const spent = -entries.reduce((sum, entry) => sum + entry.amount, 0);
       if(spent !== amount) abort(409, `That idempotency key was already used for a spend of ${spent}`);
 
-      const balance = await balanceIn(tx, user, now, config);
+      const balance = await balanceIn(tx, user);
       return [null, { duplicate: true, operationId: first.operationId, amount, entries, balance, before: balance }];
     }
 
-    await expireDue(tx, user, now);
-    const before = await balanceIn(tx, user, now, config);
+    const before = await balanceIn(tx, user);
 
     if(before.owed > 0){
       abort(402, `This account owes ${before.owed} credits from a refunded purchase, and cannot spend until that is paid off`, {
@@ -66,7 +65,7 @@ export default async ({ userId, amount, reason, reference, idempotencyKey, actor
       });
     }
 
-    const moves = takeInOrder(await spendableLots(tx, user, now), amount, 'spend');
+    const moves = takeInOrder(await spendableLots(tx, user), amount, 'spend');
     if(!moves){
       abort(402, `Not enough credits: this needs ${amount} and the balance is ${before.total}`, { balance: before.total, needed: amount });
     }
@@ -76,7 +75,7 @@ export default async ({ userId, amount, reason, reference, idempotencyKey, actor
       userId: user, operationId, key, reason: cleanReason, reference: cleanRef, actorId, note: cleanNote, now,
     }, moves);
 
-    return [null, { duplicate: false, operationId, amount, entries, balance: await balanceIn(tx, user, now, config), before }];
+    return [null, { duplicate: false, operationId, amount, entries, balance: await balanceIn(tx, user), before }];
   }, { conflict: 'That idempotency key was already used' });
 
   if(error) return [error, null];

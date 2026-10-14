@@ -80,7 +80,7 @@ export default class ClaimCredits extends ShadowComponent {
     if(this.error && !this.claim) return html`<p class="tc-danger">${this.error}</p>`;
     if(!this.claim) return html`<k-spinner></k-spinner>`;
 
-    const { name, amount, available, reason, redeemed, lotExpiresAt, lotExpiresInDays, expiresAt } = this.claim;
+    const { name, amount, available, reason, redeemed, expiresAt } = this.claim;
 
     if(this.result){
       return html`
@@ -97,9 +97,7 @@ export default class ClaimCredits extends ShadowComponent {
         ${name ? html`<p class="tc-muted mbq">${name}</p>` : nothing}
         <p class="value">${formatCredits(amount)} free credits</p>
         <p class="tc-muted">
-          ${lotExpiresInDays ? `They expire ${lotExpiresInDays} day${lotExpiresInDays === 1 ? '' : 's'} after you claim them.` : nothing}
-          ${lotExpiresAt ? `They expire on ${formatDate(lotExpiresAt)}.` : nothing}
-          ${!lotExpiresAt && !lotExpiresInDays ? 'They do not expire.' : nothing}
+          Credits never expire.
           ${expiresAt && available ? html` Claim by ${formatDate(expiresAt)}.` : nothing}
         </p>
 

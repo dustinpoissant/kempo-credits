@@ -3,9 +3,9 @@ import { kempoCreditEntry, kempoCreditLot } from '../server/db/schema.js';
 import grantCredits from '../server/utils/ledger/grant.js';
 import spendCredits from '../server/utils/ledger/spend.js';
 import reverseSpend from '../server/utils/ledger/reverse.js';
-import clawBackGrant from '../server/utils/ledger/clawback.js';
+import { clawBackGrant } from '../server/utils/ledger/clawback.js';
 import { forgiveDebt, removeCredits } from '../server/utils/ledger/adjust.js';
-import { auditAccount, expireLots, getBalance, getLot, getOperation, listEntries } from '../server/utils/ledger/read.js';
+import { auditAccount, getBalance, getLot, getOperation, listEntries } from '../server/utils/ledger/read.js';
 import { db } from './helpers/db.js';
 import { freshUser, heard, invariant, key, listenToHooks, purge, stopListening, withSetting } from './helpers/ledger.js';
 
@@ -23,10 +23,6 @@ const grant = (userId, amount, extra = {}) => grantCredits({
 const spend = (userId, amount, extra = {}) => spendCredits({
   userId, amount, reason: 'test', reference: REF, idempotencyKey: key(), ...extra,
 });
-
-const ageLot = (lotId, ms = 1000) => db.update(kempoCreditLot)
-  .set({ expiresAt: new Date(Date.now() - ms) })
-  .where(eq(kempoCreditLot.id, lotId));
 
 const check = async (userId, fail) => {
   const problem = await invariant(userId);
@@ -55,7 +51,7 @@ export default {
 
     if(result.lot.amount !== 500 || result.lot.remaining !== 500) return fail(`lot is ${result.lot.amount}/${result.lot.remaining}`);
     if(result.lot.kind !== 'paid') return fail('kind was not kept');
-    if(result.lot.expiresAt !== null) return fail('a paid lot got an expiry');
+    if('expiresAt' in result.lot) return fail('a lot has an expiry');
     if(result.balance.total !== 500 || result.balance.paid !== 500 || result.balance.promo !== 0) return fail(`balance is ${JSON.stringify(result.balance)}`);
 
     const entries = await db.select().from(kempoCreditEntry).where(eq(kempoCreditEntry.lotId, result.lot.id));
@@ -81,9 +77,8 @@ export default {
       [{ reference: { owner: 'x' } }, 400, 'a reference with no ref'],
       [{ reference: 'pur_1' }, 400, 'a reference that is not an object'],
       [{ kind: 'paid', expiresInDays: 30 }, 400, 'an expiry on paid credits'],
-      [{ expiresAt: new Date(Date.now() - 1000) }, 400, 'an expiry in the past'],
-      [{ expiresAt: 'not a date' }, 400, 'an expiry that is not a date'],
-      [{ expiresAt: new Date(Date.now() + 1000), expiresInDays: 3 }, 400, 'two expiries'],
+      [{ expiresInDays: 30 }, 400, 'an expiry on promo credits'],
+      [{ expiresAt: new Date(Date.now() + 86400000) }, 400, 'an expiry date'],
     ];
 
     for(const [overrides, code, label] of cases){
@@ -121,23 +116,21 @@ export default {
     pass('');
   },
 
-  'credits are spent soonest-expiring first, promo before paid, oldest first': async ({ pass, fail }) => {
+  'credits are spent promo before paid, oldest first': async ({ pass, fail }) => {
     const user = freshUser();
     const [, paidOld] = await grant(user, 100, { kind: 'paid' });
-    const [, promoForever] = await grant(user, 100, { kind: 'promo' });
-    const [, promoLate] = await grant(user, 100, { kind: 'promo', expiresInDays: 60 });
-    const [, promoSoon] = await grant(user, 100, { kind: 'promo', expiresInDays: 5 });
+    const [, promoOld] = await grant(user, 100, { kind: 'promo' });
     const [, paidNew] = await grant(user, 100, { kind: 'paid' });
+    const [, promoNew] = await grant(user, 100, { kind: 'promo' });
 
-    const [error, spent] = await spend(user, 450);
+    const [error, spent] = await spend(user, 350);
     if(error) return fail(error.msg);
 
     const drawn = spent.entries.map(entry => [entry.lotId, -entry.amount]);
     const expected = [
-      [promoSoon.lot.id, 100],     // expires soonest
-      [promoLate.lot.id, 100],     // expires next
-      [promoForever.lot.id, 100],  // never expires: promo before paid
-      [paidOld.lot.id, 100],       // then paid, oldest first
+      [promoOld.lot.id, 100],  // promo first, oldest first
+      [promoNew.lot.id, 100],
+      [paidOld.lot.id, 100],   // then paid, oldest first
       [paidNew.lot.id, 50],
     ];
     if(JSON.stringify(drawn) !== JSON.stringify(expected)){
@@ -194,7 +187,7 @@ export default {
 
   'a reversal puts every credit back in the lot it came from': async ({ pass, fail }) => {
     const user = freshUser();
-    const [, promo] = await grant(user, 50, { kind: 'promo', expiresInDays: 10 });
+    const [, promo] = await grant(user, 50, { kind: 'promo' });
     const [, paid] = await grant(user, 100, { kind: 'paid' });
     const idempotencyKey = key();
     await spend(user, 120, { idempotencyKey });
@@ -230,87 +223,6 @@ export default {
     await grant(user, 50, { idempotencyKey });
     const [error] = await reverseSpend({ userId: user, idempotencyKey });
     if(error?.code !== 400) return fail(`reversing a grant gave ${error?.code ?? 'success'}`);
-    pass('');
-  },
-
-  'an expired lot stops counting at once, and is written off on the next operation': async ({ pass, fail }) => {
-    const user = freshUser();
-    const [, short] = await grant(user, 70, { expiresInDays: 1 });
-    await grant(user, 30, { kind: 'paid' });
-    await ageLot(short.lot.id);
-
-    const [, before] = await getBalance({ userId: user });
-    if(before.total !== 30) return fail(`an expired lot still counts: balance ${before.total}`);
-
-    const [spendError] = await spend(user, 40);
-    if(spendError?.code !== 402) return fail('expired credits were spent');
-
-    /*
-      A refused operation rolls back everything it wrote, the write-off included — the balance never
-      depended on it. The next operation that succeeds records it.
-    */
-    const [okError] = await spend(user, 10);
-    if(okError) return fail(okError.msg);
-
-    const entries = await db.select().from(kempoCreditEntry).where(eq(kempoCreditEntry.lotId, short.lot.id));
-    const expiry = entries.find(entry => entry.type === 'expiry');
-    if(!expiry || expiry.amount !== -70) return fail('the expiry was not written to the ledger');
-
-    if(!await check(user, fail)) return;
-    pass('');
-  },
-
-  'credits returned to an expired lot expire again': async ({ pass, fail }) => {
-    const user = freshUser();
-    const [, promo] = await grant(user, 40, { expiresInDays: 2 });
-    const idempotencyKey = key();
-    await spend(user, 40, { idempotencyKey });
-    await ageLot(promo.lot.id);
-
-    const [error, reversed] = await reverseSpend({ userId: user, idempotencyKey });
-    if(error) return fail(error.msg);
-    if(reversed.expired !== 40) return fail(`expected 40 to expire again, got ${reversed.expired}`);
-    if(reversed.balance.total !== 0) return fail(`balance is ${reversed.balance.total}`);
-
-    if(!await check(user, fail)) return;
-    pass('');
-  },
-
-  'expireLots writes off every user\'s expired lots': async ({ pass, fail }) => {
-    const users = [freshUser(), freshUser()];
-    for(const user of users){
-      const [, lot] = await grant(user, 25, { expiresInDays: 1 });
-      await ageLot(lot.lot.id);
-    }
-
-    const [error, swept] = await expireLots();
-    if(error) return fail(error.msg);
-    if(swept.users < 2 || swept.credits < 50) return fail(`swept ${JSON.stringify(swept)}`);
-
-    for(const user of users){
-      const [, entries] = await listEntries({ userId: user, type: 'expiry' });
-      if(entries.total !== 1) return fail(`${user} has ${entries.total} expiry entries`);
-      if(!await check(user, fail)) return;
-    }
-
-    const [, again] = await expireLots();
-    if(again.credits !== 0) return fail('a second sweep expired something again');
-    pass('');
-  },
-
-  'the balance reports what is expiring soon': async ({ pass, fail }) => {
-    const user = freshUser();
-    await grant(user, 10, { expiresInDays: 3 });
-    await grant(user, 20, { expiresInDays: 100 });
-    await grant(user, 40, { kind: 'paid' });
-
-    const [, balance] = await getBalance({ userId: user });
-    if(balance.expiringSoon !== 10) return fail(`expiringSoon is ${balance.expiringSoon}`);
-    const days = (new Date(balance.nextExpiresAt) - Date.now()) / 86400000;
-    if(days < 2.9 || days > 3.1) return fail(`nextExpiresAt is ${balance.nextExpiresAt}`);
-
-    const wider = await withSetting('expiring_soon_days', 200, 'number', () => getBalance({ userId: user }));
-    if(wider[1].expiringSoon !== 30) return fail(`with a 200-day window expiringSoon is ${wider[1].expiringSoon}`);
     pass('');
   },
 
@@ -354,20 +266,56 @@ export default {
     pass('');
   },
 
-  'a shortfall is paid from the user\'s other credits first': async ({ pass, fail }) => {
+  'a claw back takes from the user\'s other credits before anything is owed': async ({ pass, fail }) => {
     const user = freshUser();
     const [, first] = await grant(user, 100, { kind: 'paid' });
-    await grant(user, 100, { kind: 'paid' });
+    const [, second] = await grant(user, 100, { kind: 'paid' });
     await spend(user, 150);
 
     const [error, result] = await clawBackGrant({ lotId: first.lot.id });
     if(error) return fail(error.msg);
-    if(result.shortfall !== 100 || result.settled !== 50 || result.owed !== 50) {
-      return fail(`short ${result.shortfall}, settled ${result.settled}, owed ${result.owed}`);
+    if(result.taken !== 50 || result.fromOtherCredits !== 50 || result.shortfall !== 50 || result.owed !== 50) {
+      return fail(`took ${result.taken} (${result.fromOtherCredits} from other credits), short ${result.shortfall}, owed ${result.owed}`);
     }
     if(result.balance.total !== -50) return fail(`balance is ${result.balance.total}`);
 
+    const fromSecond = await db.select().from(kempoCreditEntry).where(eq(kempoCreditEntry.lotId, second.lot.id));
+    const taken = fromSecond.find(entry => entry.type === 'clawback');
+    if(taken?.reversesOperationId !== first.operationId) return fail('the credits taken from the other lot do not say which grant they were taken back for');
+
+    /*
+      Both grants refunded: 150 was spent and none of it paid for, so 150 is owed. The second grant's
+      own claim is still its whole 100 — what was taken from its lot was taken for the first.
+    */
+    const [, both] = await clawBackGrant({ lotId: second.lot.id });
+    if(both.clawedBack !== 100 || both.owed !== 150) return fail(`second claw back took ${both.clawedBack}, owed ${both.owed}`);
+
     if(!await check(user, fail)) return;
+    pass('');
+  },
+
+  'with enough other credits a claw back leaves nothing owed': async ({ pass, fail }) => {
+    const user = freshUser();
+    const [, bought] = await grant(user, 100, { kind: 'paid' });
+    await spend(user, 70);
+    await grant(user, 200);
+
+    const [error, result] = await clawBackGrant({ lotId: bought.lot.id });
+    if(error) return fail(error.msg);
+    if(result.taken !== 100 || result.shortfall !== 0 || result.owed !== 0) return fail(`took ${result.taken}, short ${result.shortfall}, owed ${result.owed}`);
+    if(result.balance.total !== 130) return fail(`balance is ${result.balance.total}, expected 300 - 70 - 100`);
+
+    if(!await check(user, fail)) return;
+    pass('');
+  },
+
+  'credits never expire: nothing can be granted with an expiry': async ({ pass, fail }) => {
+    const user = freshUser();
+    for(const extra of [{ expiresInDays: 1 }, { expiresAt: new Date(Date.now() + 1000) }, { kind: 'paid', expiresInDays: 365 }]){
+      const [error] = await grant(user, 10, extra);
+      if(error?.code !== 400 || !/do not expire/.test(error.msg)) return fail(`${JSON.stringify(extra)} gave ${JSON.stringify(error)}`);
+    }
+    if('expiresAt' in kempoCreditLot) return fail('the lot table has an expiry column again');
     pass('');
   },
 
@@ -407,20 +355,6 @@ export default {
 
     const [over] = await clawBackGrant({ lotId: bought.lot.id, amount: 1 });
     if(over?.code !== 409) return fail('clawed back more than was granted');
-
-    if(!await check(user, fail)) return;
-    pass('');
-  },
-
-  'credits that expired are not counted against the user': async ({ pass, fail }) => {
-    const user = freshUser();
-    const [, promo] = await grant(user, 100, { expiresInDays: 1 });
-    await spend(user, 30);
-    await ageLot(promo.lot.id);
-
-    const [error, result] = await clawBackGrant({ lotId: promo.lot.id });
-    if(error) return fail(error.msg);
-    if(result.clawedBack !== 30 || result.shortfall !== 30) return fail(`clawed back ${result.clawedBack}, short ${result.shortfall}`);
 
     if(!await check(user, fail)) return;
     pass('');

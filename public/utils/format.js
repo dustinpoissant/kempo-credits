@@ -29,7 +29,6 @@ export const ENTRY_LABELS = {
   settlement: 'Applied to amount owed',
   removal: 'Removed',
   forgiveness: 'Written off',
-  expiry: 'Expired',
 };
 
 export const entryLabel = type => ENTRY_LABELS[type] || type;

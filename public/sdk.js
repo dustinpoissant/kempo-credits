@@ -102,6 +102,8 @@ export const getPurchase = id => request(`/purchases/${encodeURIComponent(id)}`)
 
 export const reconcilePurchase = id => request(`/purchases/${encodeURIComponent(id)}/reconcile`, send('POST'));
 
+export const refundPurchase = (id, body) => request(`/purchases/${encodeURIComponent(id)}/refund`, send('POST', body));
+
 export const listAllPacks = () => request('/packs?all=1');
 
 export const createPack = body => request('/packs', send('POST', body));

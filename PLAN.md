@@ -191,6 +191,17 @@ extension. Specifically:
 
 ## Open questions for the owner (do not guess)
 
-- Should paid credits ever expire? Default no; needs a deliberate decision and legal advice.
-- Is a promo lot's expiry fixed-date or relative to the grant?
-- Minimum purchase or maximum balance limits?
+- ~~Should paid credits ever expire?~~ **Decided 2026-10-14: no credit ever expires, paid or promo.**
+  The "optional expiry" on a lot and "expires soonest" in the spending order above are superseded:
+  lots have no expiry, and spending is promo before paid, oldest first.
+- ~~Is a promo lot's expiry fixed-date or relative to the grant?~~ Moot — promo credits do not expire.
+- Minimum purchase or maximum balance limits? Not built.
+
+## Decisions since
+
+- **Spent credits are never refunded (2026-10-14).** A purchase is refundable only as far as the
+  buyer still holds its credits. If credits were spent on something that never arrived, an
+  administrator gives them back first (reverse the spend, or grant credits) and the buyer can then be
+  refunded. This supersedes "Refunds and shortfall" above for every refund the site makes; the
+  shortfall remains only for refunds it cannot stop (the processor's dashboard, chargebacks).
+- **Transfers between users** were asked about (gifting, trading for items) — still not built.

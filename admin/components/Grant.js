@@ -68,8 +68,9 @@ export default class Grant extends ShadowComponent {
 
     return html`
       <p class="tc-muted">
-        Promo credits are a gift: they are not revenue, they can be set to expire, and they are spent before
-        bought credits that expire at the same time. Every grant needs a reason, which the user's ledger keeps.
+        Promo credits are a gift: they are not revenue, they are never refunded as money, and they are spent
+        before bought credits. Like all credits they never expire. Every grant needs a reason, which the user's
+        ledger keeps.
       </p>
       <div class="d-f controls">
         <input type="search" placeholder="Find a user by name, email or id" .value=${this.search} @input=${this.typed} />

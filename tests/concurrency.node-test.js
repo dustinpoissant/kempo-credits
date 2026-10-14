@@ -1,6 +1,6 @@
 import grantCredits from '../server/utils/ledger/grant.js';
 import spendCredits from '../server/utils/ledger/spend.js';
-import clawBackGrant from '../server/utils/ledger/clawback.js';
+import { clawBackGrant } from '../server/utils/ledger/clawback.js';
 import { getBalance, listEntries } from '../server/utils/ledger/read.js';
 import { integrationTier } from './helpers/db.js';
 import { freshUser, invariant, key, purge } from './helpers/ledger.js';

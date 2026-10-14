@@ -12,7 +12,7 @@ import { abort, withUserLocks } from '../ledger/transaction.js';
   Claim links: a token an administrator makes that grants promo credits to whoever redeems it.
 
   ```js
-  const [error, { claim, token }] = await createClaim({ amount: 100, maxRedemptions: 500, expiresInDays: 30 });
+  const [error, { claim, token }] = await createClaim({ amount: 100, maxRedemptions: 500, expiresInDays: 30 });  // the link, not the credits
   // share https://example.com/credits/claim?token=${token}
   const [redeemError, { balance }] = await redeemClaim({ token, userId });
   ```
@@ -22,8 +22,8 @@ import { abort, withUserLocks } from '../ledger/transaction.js';
 
   Each person can redeem a link once, and a link with a limit is never redeemed past it, however many
   people try at the same moment: a redemption locks the claim's row and counts inside that lock.
-  What the credits granted expire with is the administrator's choice per link: a fixed date
-  (`lotExpiresAt`), a number of days after each redemption (`lotExpiresInDays`), or never.
+  A link can stop working on a date (`expiresAt` / `expiresInDays`); the credits it grants never
+  expire, and a claim that asks for them to is refused.
 */
 
 const hash = token => crypto.createHash('sha256').update(token).digest('hex');
@@ -41,6 +41,10 @@ const optionalCount = (value, label, max) => {
 };
 
 export const createClaim = async ({ name, amount, lotExpiresAt, lotExpiresInDays, expiresAt, expiresInDays, maxRedemptions, createdBy = null } = {}) => {
+  if((lotExpiresAt !== undefined && lotExpiresAt !== null) || (lotExpiresInDays !== undefined && lotExpiresInDays !== null)){
+    return [{ code: 400, msg: 'Credits do not expire, so a claim link cannot give credits that do' }, null];
+  }
+
   const [nameError, cleanName] = cleanText(name, 'A name', { max: 100 });
   if(nameError) return [nameError, null];
   const [amountError] = cleanAmount(amount);
@@ -50,17 +54,8 @@ export const createClaim = async ({ name, amount, lotExpiresAt, lotExpiresInDays
   const [linkError, linkExpiry] = cleanExpiry({ expiresAt, expiresInDays }, now);
   if(linkError) return [{ ...linkError, msg: `The link’s expiry: ${linkError.msg.toLowerCase()}` }, null];
 
-  if(lotExpiresAt && lotExpiresInDays) return [{ code: 400, msg: 'The credits expire on a date or a number of days after they are claimed, not both' }, null];
-  const [lotDateError, lotDate] = cleanExpiry({ expiresAt: lotExpiresAt }, now);
-  if(lotDateError) return [{ ...lotDateError, msg: `The credits’ expiry: ${lotDateError.msg.toLowerCase()}` }, null];
-  const [lotDaysError, lotDays] = optionalCount(lotExpiresInDays, 'Days until the credits expire', 36500);
-  if(lotDaysError) return [lotDaysError, null];
   const [maxError, max] = optionalCount(maxRedemptions, 'The redemption limit', 10000000);
   if(maxError) return [maxError, null];
-
-  if(lotDate && linkExpiry && lotDate < linkExpiry){
-    return [{ code: 400, msg: 'The credits would expire before the link does, so late redemptions would grant nothing' }, null];
-  }
 
   const token = crypto.randomBytes(32).toString('base64url');
   const claim = {
@@ -69,8 +64,6 @@ export const createClaim = async ({ name, amount, lotExpiresAt, lotExpiresInDays
     tokenHint: token.slice(-4),
     name: cleanName,
     amount,
-    lotExpiresAt: lotDate,
-    lotExpiresInDays: lotDays,
     expiresAt: linkExpiry,
     maxRedemptions: max,
     redemptions: 0,
@@ -132,7 +125,6 @@ const unavailable = (claim, now) => {
   if(!claim.enabled) return 'This claim link has been turned off';
   if(claim.expiresAt && new Date(claim.expiresAt) <= now) return 'This claim link has expired';
   if(claim.maxRedemptions && claim.redemptions >= claim.maxRedemptions) return 'This claim link has been used up';
-  if(claim.lotExpiresAt && new Date(claim.lotExpiresAt) <= now) return 'The credits on this claim link have expired';
   return null;
 };
 
@@ -154,8 +146,6 @@ export const previewClaim = async ({ token, userId = null } = {}) => {
     name: claim.name,
     amount: claim.amount,
     expiresAt: claim.expiresAt,
-    lotExpiresAt: claim.lotExpiresAt,
-    lotExpiresInDays: claim.lotExpiresInDays,
     available: !unavailable(claim, new Date()),
     reason: unavailable(claim, new Date()),
     redeemed,
@@ -199,8 +189,6 @@ export const redeemClaim = async ({ token, userId } = {}) => {
     userId: user,
     amount: claim.amount,
     kind: 'promo',
-    expiresAt: claim.lotExpiresAt || undefined,
-    expiresInDays: claim.lotExpiresInDays || undefined,
     reason: 'claim',
     reference: { owner: OWNER, ref: claim.id },
     idempotencyKey: `claim:${claim.id}`,

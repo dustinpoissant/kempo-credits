@@ -1,7 +1,6 @@
-import { readConfig } from '../config/settings.js';
 import newId from '../ids.js';
 import { fire } from './events.js';
-import { balanceIn, expireDue, findOperation, settle, writeOperation } from './lots.js';
+import { balanceIn, findOperation, settle, writeOperation } from './lots.js';
 import { abort, withUserLocks } from './transaction.js';
 import { cleanKey, cleanText, cleanUserId } from './validate.js';
 
@@ -12,11 +11,13 @@ import { cleanKey, cleanText, cleanUserId } from './validate.js';
   await reverseSpend({ userId, idempotencyKey: `boost:${event.id}` });  // the spend's own key
   ```
 
-  Returning credits to the lot they came from is what keeps promo and paid apart — a refunded
-  feature bought with promo credits gives promo credits back, with the same expiry they had. A lot
-  that has expired since gets its credits back and loses them again straight away (`expired` says how
-  many), because they would have expired unspent too. A lot that went below zero after the spend — a
-  refund clawed back — has its debt reduced instead.
+  Returning credits to the lot they came from is what keeps promo and paid apart — a feature that
+  fell through after being paid for with bought credits gives bought credits back, and those are
+  again refundable with the purchase they came from. A lot that went below zero after the spend — a
+  refund that could not take everything back — has its debt reduced instead.
+
+  This is also how an administrator puts right a spend on something the user never received, before
+  that user asks for a refund of the purchase: see the README's "Refunds".
 
   Reversing twice reverses once: the second call returns the first reversal with `duplicate: true`.
 */
@@ -30,7 +31,6 @@ export default async ({ userId, idempotencyKey, reason = null, actorId = null, n
   const [noteError, cleanNote] = cleanText(note, 'A note');
   if(noteError) return [noteError, null];
 
-  const config = await readConfig();
   const now = new Date();
   const reverseKey = `reverse:${key}`;
 
@@ -51,12 +51,9 @@ export default async ({ userId, idempotencyKey, reason = null, actorId = null, n
         amount,
         reference,
         entries: existing.entries,
-        expired: 0,
-        balance: await balanceIn(tx, user, now, config),
+        balance: await balanceIn(tx, user),
       }];
     }
-
-    await expireDue(tx, user, now);
 
     const operationId = newId('op');
     const entries = await writeOperation(tx, {
@@ -71,7 +68,6 @@ export default async ({ userId, idempotencyKey, reason = null, actorId = null, n
       now,
     }, spend.entries.map(entry => ({ lotId: entry.lotId, type: 'reversal', amount: -entry.amount })));
 
-    const expired = await expireDue(tx, user, new Date(now.getTime() + 10));
     await settle(tx, { userId: user, operationId, now: new Date(now.getTime() + 20), actorId });
 
     return [null, {
@@ -81,8 +77,7 @@ export default async ({ userId, idempotencyKey, reason = null, actorId = null, n
       amount,
       reference,
       entries,
-      expired: -expired.reduce((sum, entry) => sum + entry.amount, 0),
-      balance: await balanceIn(tx, user, now, config),
+      balance: await balanceIn(tx, user),
     }];
   }, { conflict: 'That spend was already reversed' });
 

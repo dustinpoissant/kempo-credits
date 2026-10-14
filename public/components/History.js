@@ -20,7 +20,6 @@ const REASONS = {
   claim: 'Claimed from a link',
   promo: 'Given by the site',
   refund: 'Purchase refunded',
-  expired: 'Expired',
   adjustment: 'Adjusted by the site',
   settlement: 'Applied to what was owed',
 };

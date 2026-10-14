@@ -145,7 +145,11 @@ export default {
     pass('');
   },
 
-  'a refund after spending leaves the buyer owing what they spent': async ({ pass, fail }) => {
+  /*
+    A refund this site could not stop — made in the processor's own dashboard, or a chargeback —
+    after the credits were spent. The site's own refunds never get here; see refunds.node-test.js.
+  */
+  'a refund the site could not stop, after spending, leaves the buyer owing what they spent': async ({ pass, fail }) => {
     const user = freshUser();
     const { purchase, payment } = await startedPurchase({ userId: user, pack });
     await succeed(payment);

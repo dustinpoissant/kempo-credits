@@ -1,9 +1,10 @@
-import clawBackGrant from '../../../../../server/utils/ledger/clawback.js';
+import { clawBackGrant } from '../../../../../server/utils/ledger/clawback.js';
 import { gate, refuse, wholeNumber } from '../../../../../server/http/gate.js';
 
 /*
-  An administrator taking a grant back — after a dispute, or a refund made outside the processor.
-  What was already spent becomes what the user owes; see clawback.js.
+  An administrator taking a grant back without refunding any money — after a chargeback the site
+  lost, say. Credits come from the grant's own lot, then the user's other credits; what neither
+  covers is owed. See clawback.js.
 */
 export default async (request, response) => {
   const [gateError, session] = await gate(request, 'credits:adjust');

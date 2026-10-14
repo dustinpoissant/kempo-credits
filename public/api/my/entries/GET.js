@@ -2,7 +2,7 @@ import { listEntries } from '../../../../server/utils/ledger/read.js';
 import { refuse, requireSession } from '../../../../server/http/gate.js';
 
 /*
-  The signed-in user's own ledger, newest first: every grant, spend, refund and expiry that made
+  The signed-in user's own ledger, newest first: every grant, spend and refund that made
   their balance what it is.
 */
 export default async (request, response) => {

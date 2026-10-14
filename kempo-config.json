@@ -10,6 +10,7 @@
     "payment:succeeded": "./hooks/payment-succeeded.js",
     "payment:failed": "./hooks/payment-failed.js",
     "payment:canceled": "./hooks/payment-canceled.js",
+    "payment:refunding": "./hooks/payment-refunding.js",
     "payment:refunded": "./hooks/payment-refunded.js",
     "payment:disputed": "./hooks/payment-disputed.js"
   },
@@ -47,7 +48,7 @@
     },
     {
       "name": "credits:settings",
-      "description": "Change expiry, purchase limits, the refund policy and the other credits settings"
+      "description": "Change the purchase limits, the refund policy and the other credits settings"
     },
     {
       "name": "credits:purchase",
@@ -72,24 +73,6 @@
       "value": "0",
       "type": "number",
       "description": "Fire the credits:low hook when a user's balance drops below this many credits — once each time it crosses. 0 turns it off"
-    },
-    {
-      "name": "expiring_soon_days",
-      "value": "14",
-      "type": "number",
-      "description": "How far ahead a balance counts credits as expiring soon"
-    },
-    {
-      "name": "paid_credits_expire",
-      "value": "false",
-      "type": "boolean",
-      "description": "Whether bought credits expire. Off by default, and leave it off unless you have taken advice: expiring a prepaid balance is restricted by consumer-protection and unclaimed-property law in many places"
-    },
-    {
-      "name": "paid_credits_expiry_days",
-      "value": "365",
-      "type": "number",
-      "description": "When bought credits expire, how many days after the purchase. Ignored while paid_credits_expire is off"
     },
     {
       "name": "purchase_limit_per_user",

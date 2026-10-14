@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, isNull, lt, lte, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, lt, sql } from 'drizzle-orm';
 import { kempoCreditEntry, kempoCreditLot } from '../../db/schema.js';
 import newId from '../ids.js';
 import { abort } from './transaction.js';
@@ -6,34 +6,22 @@ import { abort } from './transaction.js';
 /*
   The pieces every ledger operation is built from. Each takes the transaction it runs in, and
   assumes the caller holds the user's lock (see transaction.js).
+
+  Credits never expire, paid or promo. There is no expiry on a lot and nothing that writes one off.
 */
 
-const DAY = 86400000;
-
 /*
-  A lot counts towards a balance when it has not expired — or when it is below zero, because a debt
-  does not expire just because the credits it came from would have.
-*/
-export const isLive = (lot, now) => lot.remaining < 0 || !lot.expiresAt || new Date(lot.expiresAt).getTime() > now.getTime();
-
-/*
-  The order credits are spent in: whatever expires soonest first, so nobody loses credits to expiry
-  while longer-lived ones are drawn; promo before paid when they expire together, so a user never
-  loses free credits while bought ones are used; and oldest first after that.
+  The order credits are spent in: promo before paid, so what a user bought stays theirs — and
+  refundable — for as long as possible; oldest first after that.
 */
 export const SPENDING_ORDER = lot => [
-  sql`${lot.expiresAt} asc nulls last`,
   sql`(${lot.kind} = 'promo') desc`,
   asc(lot.createdAt),
   asc(lot.id),
 ];
 
-export const spendableLots = (tx, userId, now) => tx.select().from(kempoCreditLot)
-  .where(and(
-    eq(kempoCreditLot.userId, userId),
-    gt(kempoCreditLot.remaining, 0),
-    or(isNull(kempoCreditLot.expiresAt), gt(kempoCreditLot.expiresAt, now)),
-  ))
+export const spendableLots = (tx, userId) => tx.select().from(kempoCreditLot)
+  .where(and(eq(kempoCreditLot.userId, userId), gt(kempoCreditLot.remaining, 0)))
   .orderBy(...SPENDING_ORDER(kempoCreditLot));
 
 export const owingLots = (tx, userId) => tx.select().from(kempoCreditLot)
@@ -43,30 +31,20 @@ export const owingLots = (tx, userId) => tx.select().from(kempoCreditLot)
 /*
   The balance, worked out from the lots. Nothing caches it, so this is the only definition of it.
 */
-export const summarise = (lots, now, { expiringSoonDays = 14 } = {}) => {
-  const soon = now.getTime() + expiringSoonDays * DAY;
-  const balance = { total: 0, paid: 0, promo: 0, owed: 0, expiringSoon: 0, nextExpiresAt: null };
+export const summarise = lots => {
+  const balance = { total: 0, paid: 0, promo: 0, owed: 0 };
 
   for(const lot of lots){
-    if(!isLive(lot, now)) continue;
     balance[lot.kind === 'promo' ? 'promo' : 'paid'] += lot.remaining;
     balance.total += lot.remaining;
     if(lot.remaining < 0) balance.owed -= lot.remaining;
-
-    if(lot.remaining > 0 && lot.expiresAt){
-      const at = new Date(lot.expiresAt);
-      if(at.getTime() <= soon) balance.expiringSoon += lot.remaining;
-      if(!balance.nextExpiresAt || at < balance.nextExpiresAt) balance.nextExpiresAt = at;
-    }
   }
 
   return balance;
 };
 
-export const balanceIn = async (tx, userId, now, options) => summarise(
+export const balanceIn = async (tx, userId) => summarise(
   await tx.select().from(kempoCreditLot).where(and(eq(kempoCreditLot.userId, userId), sql`${kempoCreditLot.remaining} <> 0`)),
-  now,
-  options,
 );
 
 /*
@@ -135,7 +113,7 @@ export const writeOperation = async (tx, { userId, operationId, key = null, reas
 };
 
 /*
-  Moves `amount` out of lots in spending order. Returns the moves, or null when the lots do not hold
+  Moves `amount` out of lots in the order given. Returns the moves, or null when the lots do not hold
   enough — the caller decides what "not enough" means for it.
 */
 export const takeInOrder = (lots, amount, type) => {
@@ -154,29 +132,6 @@ export const takeInOrder = (lots, amount, type) => {
 };
 
 /*
-  Writes off whatever is left in this user's expired lots, as `expiry` entries.
-
-  A balance never counts an expired lot whether or not this has run — see `isLive`. This is what
-  makes the ledger say so: without it, a user's entries would add up to more than their balance and
-  nothing would explain the difference. It runs at the start of every operation on the user — inside
-  that operation's transaction, so one that is refused writes nothing, this included — and
-  `expireLots` runs it for everybody.
-*/
-export const expireDue = async (tx, userId, now) => {
-  const due = await tx.select().from(kempoCreditLot)
-    .where(and(eq(kempoCreditLot.userId, userId), gt(kempoCreditLot.remaining, 0), lte(kempoCreditLot.expiresAt, now)))
-    .orderBy(asc(kempoCreditLot.expiresAt), asc(kempoCreditLot.id));
-
-  if(!due.length) return [];
-
-  return writeOperation(tx, { userId, operationId: newId('op'), reason: 'expired', now }, due.map(lot => ({
-    lotId: lot.id,
-    type: 'expiry',
-    amount: -lot.remaining,
-  })));
-};
-
-/*
   Pays off negative lots from positive ones, oldest debt first, positive lots in spending order.
   Moves credits only: the user's total does not change, which is the point — a debt and a balance
   are never both showing at once.
@@ -185,7 +140,7 @@ export const settle = async (tx, { userId, operationId, now, reason = 'settlemen
   const owing = await owingLots(tx, userId);
   if(!owing.length) return [];
 
-  const sources = await spendableLots(tx, userId, now);
+  const sources = await spendableLots(tx, userId);
   const moves = [];
 
   for(const debt of owing){

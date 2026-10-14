@@ -208,6 +208,24 @@ export default {
     pass('');
   },
 
+  /*
+    The site owner's rule: no credit ever expires, bought or promo. Kept structural — there is no
+    column, setting or function a future change could quietly switch back on.
+  */
+  'credits cannot expire: no expiry column, setting or sweep exists': async ({ pass, fail }) => {
+    const lotColumns = getTableConfig(schema.kempoCreditLot).columns.map(column => column.name);
+    if(lotColumns.some(name => /expir/i.test(name))) return fail(`kempoCreditLot has ${lotColumns.filter(name => /expir/i.test(name))}`);
+    const claimColumns = getTableConfig(schema.kempoCreditClaim).columns.map(column => column.name);
+    if(claimColumns.some(name => /^lotExpir/i.test(name))) return fail('a claim link can set its credits to expire');
+
+    const settings = config.settings.map(setting => setting.name).filter(name => /expir/i.test(name));
+    if(settings.length) return fail(`declared settings about expiry: ${settings.join(', ')}`);
+
+    const sdk = await read('sdk.js');
+    if(/expire/i.test(sdk.replace(/\/\*[\s\S]*?\*\//g, ''))) return fail('the SDK exports something about expiry');
+    pass('');
+  },
+
   'kempo-tax is never imported statically': async ({ pass, fail }) => {
     for(const [file, text] of contents){
       if(/^\s*import\s[^;]*from\s+['"]kempo-tax/m.test(text)) return fail(`${relative(file)} imports kempo-tax at load time`);

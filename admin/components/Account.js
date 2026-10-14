@@ -116,7 +116,7 @@ export default class Account extends ShadowComponent {
   openAction = action => {
     this.action = this.action === action ? '' : action;
     this.target = null;
-    this.form = { expiry: 'never' };
+    this.form = {};
     this.#key = newKey();
     this.error = '';
     this.notice = '';
@@ -159,8 +159,6 @@ export default class Account extends ShadowComponent {
         amount: this.amount(),
         note,
         idempotencyKey,
-        expiresInDays: this.form.expiry === 'days' ? Number(this.form.days) : undefined,
-        expiresAt: this.form.expiry === 'date' && this.form.date ? new Date(`${this.form.date}T23:59:59`).toISOString() : undefined,
       });
     } else if(this.action === 'remove'){
       result = await removeCredits(this.userId, { amount: this.amount(), note, idempotencyKey });
@@ -209,13 +207,6 @@ export default class Account extends ShadowComponent {
             <span class="tc-muted">From a refund of credits already spent. Cannot spend until covered.</span>
           </div>
         ` : nothing}
-        ${balance.expiringSoon ? html`
-          <div class="card tile">
-            <span class="tc-muted">Expiring soon</span>
-            <span class="value tc-warning">${formatCredits(balance.expiringSoon)}</span>
-            <span class="tc-muted">Next on ${formatDate(balance.nextExpiresAt)}</span>
-          </div>
-        ` : nothing}
       </div>
 
       ${audit.ok ? html`
@@ -259,10 +250,10 @@ export default class Account extends ShadowComponent {
       <form class="card" @submit=${this.submit}>
         <p><strong>${title}</strong></p>
         ${this.target?.kind === 'lot' ? html`
-          <p class="tc-muted">Whatever of it was already spent is recorded as owed, and blocks spending until it is covered.</p>
+          <p class="tc-muted">Takes the credits back without refunding any money — for a chargeback the site lost, say. To refund a purchase, use Refund on it under Purchases. Credits come from this grant first, then their other credits; whatever they do not hold is recorded as owed and blocks spending until it is covered.</p>
         ` : nothing}
         ${this.target?.kind === 'spend' ? html`
-          <p class="tc-muted">The credits go back to the lots they came from, with the expiry those lots have.</p>
+          <p class="tc-muted">The credits go back to the lots they came from. Bought credits put back this way make their purchase refundable again.</p>
         ` : nothing}
 
         <div class="row -mx">
@@ -277,29 +268,6 @@ export default class Account extends ShadowComponent {
             <input type="text" required maxlength="500" .value=${this.form.note || ''} @input=${event => this.set('note', event.target.value)} />
           </label>
         </div>
-
-        ${this.action === 'grant' ? html`
-          <div class="row -mx">
-            <label class="span-4 m-span-12 px">
-              <span class="d-b">They expire</span>
-              <select @change=${event => this.set('expiry', event.target.value)}>
-                <option value="never" ?selected=${this.form.expiry === 'never'}>Never</option>
-                <option value="days" ?selected=${this.form.expiry === 'days'}>A number of days from now</option>
-                <option value="date" ?selected=${this.form.expiry === 'date'}>On a date</option>
-              </select>
-            </label>
-            ${this.form.expiry === 'days' ? html`
-              <label class="span-4 m-span-12 px"><span class="d-b">Days</span>
-                <input type="number" min="1" step="1" required .value=${this.form.days || ''} @input=${event => this.set('days', event.target.value)} />
-              </label>
-            ` : nothing}
-            ${this.form.expiry === 'date' ? html`
-              <label class="span-4 m-span-12 px"><span class="d-b">Date</span>
-                <input type="date" required .value=${this.form.date || ''} @input=${event => this.set('date', event.target.value)} />
-              </label>
-            ` : nothing}
-          </div>
-        ` : nothing}
 
         ${this.error ? html`<p class="tc-danger" role="alert">${this.error}</p>` : nothing}
         <div class="d-f actions mb">
@@ -320,17 +288,16 @@ export default class Account extends ShadowComponent {
     return html`
       <div class="table-wrapper mb">
         <table>
-          <thead><tr><th>Granted</th><th>Kind</th><th class="ta-right">Amount</th><th class="ta-right">Left</th><th>Expires</th><th>Why</th><th></th></tr></thead>
+          <thead><tr><th>Granted</th><th>Kind</th><th class="ta-right">Amount</th><th class="ta-right">Left</th><th>Why</th><th></th></tr></thead>
           <tbody>
             ${lots.map(lot => html`
               <tr>
                 <td>${formatDateTime(lot.createdAt)}</td>
                 <td>${lot.kind === 'paid' ? 'Bought' : 'Promo'}</td>
                 <td class="ta-right">${formatCredits(lot.amount)}</td>
-                <td class="ta-right ${lot.remaining < 0 ? 'tc-danger' : !lot.live ? 'tc-muted' : ''}">
-                  ${formatCredits(lot.remaining)}${!lot.live && lot.remaining > 0 ? html` <span>expired</span>` : nothing}
+                <td class="ta-right ${lot.remaining < 0 ? 'tc-danger' : ''}">
+                  ${formatCredits(lot.remaining)}
                 </td>
-                <td>${lot.expiresAt ? formatDate(lot.expiresAt) : 'Never'}</td>
                 <td>
                   ${lot.reason}${lot.referenceOwner ? html` <span class="tc-muted">· ${lot.referenceOwner} ${lot.referenceId}</span>` : nothing}
                   ${lot.note ? html`<span class="d-b tc-muted">${lot.note}</span>` : nothing}

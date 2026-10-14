@@ -14,7 +14,7 @@ import { getSettings, saveSettings } from '/credits/sdk.js';
 
 const GROUPS = [
   { title: 'At checkout', names: ['refund_policy', 'tax_class'] },
-  { title: 'Balances', names: ['low_balance_threshold', 'expiring_soon_days', 'paid_credits_expire', 'paid_credits_expiry_days'] },
+  { title: 'Balances', note: 'Credits never expire, bought or promo.', names: ['low_balance_threshold'] },
   {
     title: 'Card-testing protection',
     note: 'Limits on how often purchases can be attempted, counted over the last hour. Attempts over a limit are refused before they reach the payment processor and appear under Purchases → Blocked attempts.',
@@ -26,9 +26,6 @@ const LABELS = {
   refund_policy: 'Refund policy',
   tax_class: 'Tax class',
   low_balance_threshold: 'Low-balance threshold',
-  expiring_soon_days: 'Expiring soon (days)',
-  paid_credits_expire: 'Bought credits expire',
-  paid_credits_expiry_days: 'Bought credits expire after (days)',
   purchase_limit_per_user: 'Attempts per account',
   purchase_limit_per_ip: 'Attempts per IP address',
   purchase_limit_global: 'Attempts for the whole site',
@@ -116,16 +113,6 @@ export default class Settings extends ShadowComponent {
         <div class="mb">
           <label class="checkbox"><input type="checkbox" .checked=${!!value} @change=${event => this.set(name, event.target.checked)} /> ${LABELS[name]}</label>
           <p class="tc-muted mb0">${description}</p>
-          ${name === 'paid_credits_expire' && value ? html`
-            <div class="card tc-danger mt">
-              <strong>Take advice before turning this on.</strong>
-              <p class="mb0">
-                Bought credits are a prepaid balance. Many places restrict letting one expire — gift-card and consumer-protection
-                rules, and unclaimed-property law that can require the unspent value to be reported or handed over. It applies to
-                credits bought from now on; credits already bought keep never expiring.
-              </p>
-            </div>
-          ` : nothing}
         </div>
       `;
     }
