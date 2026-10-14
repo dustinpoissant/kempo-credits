@@ -1,0 +1,38 @@
+name: Run Unit Tests
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+jobs:
+  # No tables and no external service: the suite runs against an in-memory Postgres (PGlite), and
+  # nothing in it calls Stripe.
+  unit:
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    runs-on: ubuntu-latest
+    env:
+      # Not a real key anywhere — the suites that store `secret` settings need *a* valid one.
+      SETTINGS_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+
+      - run: npm ci
+
+      # kempo/kempo-ui/kempo-server are peer dependencies, which npm ci does not install.
+      # legacy-peer-deps (set repo-wide in .npmrc) makes a bare `npm install <peer-name>` silently
+      # no-op; --no-legacy-peer-deps forces a real install and --force gets past the ERESOLVE.
+      - name: Install the host for the test gate
+        run: npm install --no-save --no-legacy-peer-deps --force kempo@latest kempo-ui@latest kempo-server@latest
+
+      - name: Run unit tests
+        run: npm test

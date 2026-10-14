@@ -1,0 +1,8 @@
+{
+  "docs": "https://github.com/dustinpoissant/kempo-credits#readme",
+  "git": "https://github.com/dustinpoissant/kempo-credits",
+  "public-scope": "credits",
+  "dependencies": [
+    "kempo-payments"
+  ]
+}
