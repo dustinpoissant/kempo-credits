@@ -136,7 +136,7 @@ export default class Balances extends ShadowComponent {
       <div class="table-wrapper">
         <table>
           <thead>
-            <tr><th>User</th><th class="ta-right">Balance</th><th>Last change</th><th></th></tr>
+            <tr><th>User</th><th class="ta-right">Balance</th><th>Last change</th><th>Ledger</th></tr>
           </thead>
           <tbody>
             ${this.accounts.map(account => html`
@@ -150,7 +150,7 @@ export default class Balances extends ShadowComponent {
                   ${account.owed ? html`<span class="d-b">owes ${formatCredits(account.owed)}</span>` : nothing}
                 </td>
                 <td class="tc-muted">${account.lastActivity ? formatDateTime(account.lastActivity) : 'Never'}</td>
-                <td><button class="link">Open</button></td>
+                <td><button class="link">View ledger</button></td>
               </tr>
             `)}
           </tbody>
@@ -178,7 +178,7 @@ export default class Balances extends ShadowComponent {
       ${this.#renderTiles()}
       <div class="d-f controls">
         <input type="search" placeholder="Find a user by name, email or id" .value=${this.search} @input=${this.typed} />
-        <label class="checkbox"><input type="checkbox" .checked=${this.owing} @change=${this.toggleOwing} /> Owing only</label>
+        <label class="checkbox"><input type="checkbox" .checked=${this.owing} @change=${this.toggleOwing} /> Only accounts that owe credits</label>
         ${this.loading ? html`<k-spinner size="sm"></k-spinner>` : nothing}
       </div>
       ${this.error ? html`<p class="tc-danger">${this.error}</p>` : nothing}
@@ -189,7 +189,8 @@ export default class Balances extends ShadowComponent {
   static styles = css`
     :host { display: block; }
     .tiles, .controls, .pager { gap: var(--spacer); align-items: center; }
-    .tile { display: flex; flex-direction: column; min-width: 13rem; }
+    .tiles { margin-bottom: var(--spacer); }
+    .tile { display: flex; flex-direction: column; gap: var(--spacer_q); min-width: 13rem; padding-bottom: var(--spacer); }
     .tile .value { font-size: 1.6rem; line-height: 1.2; font-weight: 600; }
     .controls { margin-bottom: var(--spacer); }
     .controls input[type="search"] { margin: 0; max-width: 24rem; }
