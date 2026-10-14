@@ -114,6 +114,28 @@ The flow lives in this extension, because every consumer would otherwise reimple
 Whether the pack price includes tax or has it added is kempo-tax's `prices_include_tax`; this
 extension must work with either and must show the buyer the final amount before they pay.
 
+## Abuse protection
+
+The smallest pack is $0.99 and most buyers will be guests, which is exactly the shape *card testing*
+takes: someone runs lists of stolen card numbers through a cheap checkout to see which still work.
+It costs the site processor fees and, if it gets bad, the Stripe account itself. This is a real
+operational risk of the pricing model, not a corner case.
+
+- **Rate-limit the purchase and payment-creation routes** per user, per IP and globally. Limits are
+  settings, with defaults that a real person never hits (a handful of purchase attempts an hour).
+- **Count failed payments per user and per IP**, and block further attempts after a threshold for a
+  cool-down. A card that was declined three times is not a customer.
+- **Require a signed-in user to buy.** Never sell credits to an anonymous session.
+- **Never create a payment for an amount the server did not price** (already required above) and
+  never accept a pack id the administrator has disabled.
+- **Document turning on Stripe Radar** and its rules in the README, as part of going live.
+- **Surface it**: an administrator-visible log of blocked attempts, so an attack is noticed before
+  the Stripe bill is.
+- Tests for each limit, including that a legitimate retry after one decline still works.
+
+Disputes cost a flat fee that wipes out the margin on many small sales. Keep a receipt and the
+refund policy visible at the point of purchase, and record what the buyer was shown.
+
 ## Dependencies
 
 `kempo-payments` — **hard**, declared in `kempo-config.json` `dependencies`, enforced at install.
