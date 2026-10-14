@@ -1,4 +1,4 @@
-import { createIndexes } from './server/db/indexes.js';
+import { createIndexes, ensureColumns } from './server/db/indexes.js';
 
 /*
   What kempo-config.json cannot say: the indexes. kempo's installer makes this extension's tables
@@ -10,6 +10,7 @@ import { createIndexes } from './server/db/indexes.js';
   site turns on by giving that permission to a group, deliberately.
 */
 export default async () => {
+  await ensureColumns();
   await createIndexes();
   console.log('[kempo-credits] Installed. Other extensions grant credits through kempo-credits/sdk; to sell them, install kempo-credit-packs.');
 };

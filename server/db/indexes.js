@@ -20,6 +20,26 @@ export const INDEXES = [
   { name: 'kempoCreditLot_reference_idx', sql: sql`CREATE INDEX IF NOT EXISTS "kempoCreditLot_reference_idx" ON "kempoCreditLot" ("referenceOwner", "referenceId")` },
 ];
 
+/*
+  Columns added since a table was first created. kempo's installer makes a table from the schema only
+  when it is missing, so a site whose ledger predates a column never gets it — and every read of the
+  ledger then fails on it. Each statement is `IF NOT EXISTS`, so this is safe on every install and
+  update, and a failure throws: a ledger that cannot be read is not something to carry on with.
+*/
+export const COLUMNS = [
+  { name: 'kempoCreditEntry.counterpartyId', sql: sql`ALTER TABLE "kempoCreditEntry" ADD COLUMN IF NOT EXISTS "counterpartyId" text` },
+];
+
+export const ensureColumns = async () => {
+  for(const column of COLUMNS){
+    try {
+      await db.execute(column.sql);
+    } catch(error) {
+      throw new Error(`[kempo-credits] Could not add the column ${column.name}: ${error.message}`);
+    }
+  }
+};
+
 export const createIndexes = async () => {
   for(const index of INDEXES){
     try {

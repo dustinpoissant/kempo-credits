@@ -8,6 +8,7 @@ import uninstall from '../uninstall.js';
 import { INDEXES } from '../server/db/indexes.js';
 import { kempoCreditEntry } from '../server/db/schema.js';
 import grantCredits from '../server/utils/ledger/grant.js';
+import { listEntries } from '../server/utils/ledger/read.js';
 import { db, seedDatabase } from './helpers/db.js';
 import { freshUser, key, purge } from './helpers/ledger.js';
 
@@ -101,6 +102,18 @@ export default {
     await quietly(install);
     const rows = await db.execute(sql`select 1 from "groupPermission" where "permissionName" = 'credits:transfer'`);
     if(rows.length) return fail('installing gave credits:transfer to a group');
+    pass('');
+  },
+
+  'update adds a column an older ledger lacks, and the ledger reads again': async ({ pass, fail }) => {
+    await db.execute(sql.raw('ALTER TABLE "kempoCreditEntry" DROP COLUMN IF EXISTS "counterpartyId"'));
+    await quietly(update);
+
+    const user = freshUser();
+    await grantCredits({ userId: user, amount: 10, reason: 'test', idempotencyKey: key() });
+    const [error, listed] = await listEntries({ userId: user });
+    if(error) return fail(`the ledger could not be read after the update: ${error.msg}`);
+    if(listed.entries.length !== 1) return fail(`${listed.entries.length} entries`);
     pass('');
   },
 

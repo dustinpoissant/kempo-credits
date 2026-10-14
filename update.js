@@ -1,5 +1,5 @@
 import { deleteSetting } from 'kempo/server/sdk.js';
-import { createIndexes } from './server/db/indexes.js';
+import { createIndexes, ensureColumns } from './server/db/indexes.js';
 
 /*
   Updating makes sure the indexes exist — every statement is `IF NOT EXISTS`, so this is safe from
@@ -18,6 +18,7 @@ const RETIRED = [
 ];
 
 export default async () => {
+  await ensureColumns();
   await createIndexes();
   for(const name of RETIRED) await deleteSetting('kempo-credits', name);
 };
