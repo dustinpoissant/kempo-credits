@@ -136,13 +136,13 @@ export default class Balances extends ShadowComponent {
       <div class="table-wrapper">
         <table>
           <thead>
-            <tr><th>User</th><th class="ta-right">Balance</th><th>Last change</th><th>Ledger</th></tr>
+            <tr><th>User</th><th class="ta-right">Balance</th><th>Last change</th></tr>
           </thead>
           <tbody>
             ${this.accounts.map(account => html`
               <tr @click=${() => this.open(account.userId)}>
                 <td>
-                  ${account.name || html`<span class="tc-muted">No such user</span>`}
+                  ${account.name ? html`<button class="link">${account.name}</button>` : html`<span class="tc-muted">No such user</span>`}
                   <span class="tc-muted d-b">${account.email || account.userId}</span>
                 </td>
                 <td class="ta-right ${account.total < 0 ? 'tc-danger' : ''}">
@@ -150,7 +150,6 @@ export default class Balances extends ShadowComponent {
                   ${account.owed ? html`<span class="d-b">owes ${formatCredits(account.owed)}</span>` : nothing}
                 </td>
                 <td class="tc-muted">${account.lastActivity ? formatDateTime(account.lastActivity) : 'Never'}</td>
-                <td><button class="link">View ledger</button></td>
               </tr>
             `)}
           </tbody>
