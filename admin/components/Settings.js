@@ -100,14 +100,13 @@ export default class Settings extends ShadowComponent {
     if(type === 'boolean'){
       return html`
         <div class="mb">
-          <label class="checkbox"><input type="checkbox" .checked=${!!value} @change=${event => this.set(name, event.target.checked)} /> ${LABELS[name]}</label>
-          <p class="tc-muted mb0">${description}</p>
+          <label class="checkbox"><input type="checkbox" .checked=${!!value} @change=${event => this.set(name, event.target.checked)} /> ${LABELS[name]}<small class="d-b tc-muted">${description}</small></label>
         </div>
       `;
     }
 
     return html`
-      <label class="mb"><span class="d-b">${LABELS[name]}</span>
+      <label class="d-b mb"><span class="d-b">${LABELS[name]}</span><small class="d-b tc-muted">${description}</small>
         <input
           type=${type === 'number' ? 'number' : 'text'}
           min=${type === 'number' ? 0 : nothing}
@@ -115,7 +114,6 @@ export default class Settings extends ShadowComponent {
           .value=${String(value ?? '')}
           @input=${event => this.set(name, type === 'number' && event.target.value !== '' ? Number(event.target.value) : event.target.value)}
         />
-        <span class="tc-muted d-b">${description}</span>
       </label>
     `;
   }
@@ -129,11 +127,11 @@ export default class Settings extends ShadowComponent {
           <div class="span-8 t-span-12 m-span-12">
             ${GROUPS.map(group => html`
               <h3>${group.title}</h3>
-              ${group.note ? html`<p class="tc-muted">${group.note}</p>` : nothing}
+              ${group.note ? html`<p class="tc-muted mb">${group.note}</p>` : nothing}
               ${group.names.map(name => this.settings.find(setting => setting.name === name)).filter(Boolean).map(setting => this.#renderField(setting))}
             `)}
-            ${this.error ? html`<p class="tc-danger" role="alert">${this.error}</p>` : nothing}
-            ${this.notice ? html`<p class="tc-success" role="status">${this.notice}</p>` : nothing}
+            ${this.error ? html`<p class="tc-danger mb" role="alert">${this.error}</p>` : nothing}
+            ${this.notice ? html`<p class="tc-success mb" role="status">${this.notice}</p>` : nothing}
             <button class="primary" type="submit" ?disabled=${this.busy}>${this.busy ? 'Saving…' : 'Save'}</button>
           </div>
         </div>

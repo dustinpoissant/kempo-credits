@@ -261,13 +261,13 @@ export default class Account extends ShadowComponent {
 
         <div class="row -mx">
           ${showAmount ? html`
-            <label class="span-4 m-span-12 px">
+            <label class="span-4 m-span-12 px mb">
               <span class="d-b">${amountLabel}</span>
               <input type="number" min="1" step="1" ?required=${this.action === 'grant' || this.action === 'remove'} .value=${this.form.amount ?? ''} @input=${event => this.set('amount', event.target.value)} />
             </label>
           ` : nothing}
-          <label class="span-8 m-span-12 px">
-            <span class="d-b">Why <span class="tc-muted">(optional — the ledger will show it)</span></span>
+          <label class="span-8 m-span-12 px mb">
+            <span class="d-b">Why</span><small class="d-b tc-muted">Optional. The ledger will show it.</small>
             <input type="text" maxlength="500" .value=${this.form.note || ''} @input=${event => this.set('note', event.target.value)} />
           </label>
         </div>
