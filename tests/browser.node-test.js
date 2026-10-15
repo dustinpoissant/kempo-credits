@@ -110,6 +110,9 @@ const tests = {
       ['GET', '/admin/extension/kempo-credits/', null, 302],
       ['GET', '/admin/extension/kempo-credits/', 'alice', 302],
       ['GET', '/admin/extension/kempo-credits/', 'admin', 200],
+      ['GET', '/admin/extension/kempo-credits/account/', null, 302],
+      ['GET', '/admin/extension/kempo-credits/account/', 'member', 302],
+      ['GET', '/admin/extension/kempo-credits/account/', 'support', 200],
     ];
 
     const wrong = [];
@@ -152,7 +155,7 @@ const tests = {
 
   'an administrator gives and takes credits from a member’s ledger, and the audit holds': async ({ pass, fail }) => {
     const page = await newPage('admin');
-    await page.goto(`${state.server.base}/admin/extension/kempo-credits/?user=${state.ids.alice}`);
+    await page.goto(`${state.server.base}/admin/extension/kempo-credits/account/?user=${state.ids.alice}`);
     const account = page.locator('k-cred-account');
     await account.getByText('Alice Member').waitFor();
 
@@ -188,7 +191,7 @@ const tests = {
     for(const name of ['balances', 'grant', 'settings']) visible[name] = await page.locator(`k-tab[for="${name}"]`).isVisible();
     if(JSON.stringify(visible) !== JSON.stringify({ balances: true, grant: true, settings: false })) return fail(`tabs visible: ${JSON.stringify(visible)}`);
 
-    await page.goto(`${state.server.base}/admin/extension/kempo-credits/?user=${state.ids.alice}`);
+    await page.goto(`${state.server.base}/admin/extension/kempo-credits/account/?user=${state.ids.alice}`);
     const account = page.locator('k-cred-account');
     await account.getByText('Alice Member').waitFor();
     if(!await account.getByRole('button', { name: 'Give credits' }).count()) return fail('support cannot give credits');
@@ -323,6 +326,35 @@ const tests = {
     await page.locator('k-cred-history').getByText('Watched an ad').waitFor();
     await page.locator('k-cred-balance').getByText('ad reward').waitFor();
     await shot(page, 'wallet-kinds');
+    await page.context().close();
+    pass('');
+  },
+
+  /*
+    A user is a page of their own, so the address names them, the back button returns to the list
+    and a pasted link lands on them. The old ?user= on the list page still works.
+  */
+  'a user is a page of their own: the address changes and the back button returns to the list': async ({ pass, fail }) => {
+    const page = await newPage('admin');
+    const list = `${state.server.base}/admin/extension/kempo-credits/`;
+    await page.goto(list);
+    const balances = page.locator('k-cred-balances');
+    await balances.getByText('Credits held').waitFor();
+    await balances.getByPlaceholder(/Find a user/).fill('Alice');
+    await balances.getByRole('link', { name: 'Alice Member' }).click();
+    await page.waitForURL(/account\/\?user=/);
+    await page.locator('k-cred-account').getByText('Alice Member').first().waitFor();
+    if(!page.url().includes(state.ids.alice)) return fail(`the address does not name the user: ${page.url()}`);
+
+    await page.goBack();
+    await page.waitForURL(list);
+    await page.locator('k-cred-balances').getByText('Credits held').waitFor();
+
+    await page.goto(`${list}?user=${state.ids.alice}`);
+    await page.waitForURL(/account\/\?user=/);
+
+    await page.getByRole('link', { name: 'Credits' }).first().click();
+    await page.waitForURL(list);
     await page.context().close();
     pass('');
   },

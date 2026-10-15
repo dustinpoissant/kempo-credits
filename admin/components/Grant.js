@@ -1,21 +1,20 @@
 import ShadowComponent from '/kempo-ui/components/ShadowComponent.js';
 import '/kempo-ui/components/Icon.js';
 import '/kempo-ui/components/Spinner.js';
-import '/admin/extension/kempo-credits/components/Account.js';
 import { html, css, nothing } from '/kempo-ui/lit-all.min.js';
 import { listAccounts } from '/credits/sdk.js';
 import { formatCredits } from '/credits/utils/format.js';
 
 /*
-  Giving one person credits: find them, then the grant form, open, on their ledger — so whoever
-  is giving can see what that person already has before deciding how much more.
+  Giving one person credits: find them, then go to their page with the grant form already open, on
+  their ledger — so whoever is giving can see what that person already has before deciding how much
+  more.
 
 */
 export default class Grant extends ShadowComponent {
   static properties = {
     search: { type: String, state: true },
     results: { type: Array, state: true },
-    userId: { type: String, state: true },
     loading: { type: Boolean, state: true },
     error: { type: String, state: true },
   };
@@ -26,7 +25,6 @@ export default class Grant extends ShadowComponent {
     super();
     this.search = '';
     this.results = [];
-    this.userId = '';
     this.loading = false;
     this.error = '';
   }
@@ -58,13 +56,6 @@ export default class Grant extends ShadowComponent {
   */
 
   render(){
-    if(this.userId){
-      return html`
-        <button class="link mb" @click=${() => { this.userId = ''; }}><k-icon name="arrow" direction="left"></k-icon> Someone else</button>
-        <k-cred-account user-id=${this.userId} open="grant"></k-cred-account>
-      `;
-    }
-
     return html`
       <p class="tc-muted">
         Credits given here are a gift from the site. Like all credits they never expire. Every grant needs a
@@ -85,7 +76,7 @@ export default class Grant extends ShadowComponent {
                 <tr>
                   <td>${account.name || account.userId}<span class="tc-muted d-b">${account.email || ''}</span></td>
                   <td class="ta-right">${formatCredits(account.total)}</td>
-                  <td><button class="primary" @click=${() => { this.userId = account.userId; }}>Give credits</button></td>
+                  <td><a class="btn primary" href="/admin/extension/kempo-credits/account/?user=${encodeURIComponent(account.userId)}&open=grant">Give credits</a></td>
                 </tr>
               `)}
             </tbody>

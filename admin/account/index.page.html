@@ -1,0 +1,28 @@
+<!--
+locked: true
+-->
+<page title="Account - Credits - Admin">
+<content>
+  <script type="module" src="/kempo-ui/components/Icon.js"></script>
+  <script type="module" src="/admin/extension/kempo-credits/components/Account.js"></script>
+
+  <div class="d-f mb" style="align-items: center; gap: var(--spacer);">
+    <a href="/admin/extension/kempo-credits/" class="btn"><k-icon name="arrow" direction="left"></k-icon> Credits</a>
+    <h1 class="flex mb0">Account</h1>
+  </div>
+
+  <k-cred-account id="account"></k-cred-account>
+
+  <script type="module">
+    /*
+      This is one user's page: ?user= is who, and ?open=grant opens the form to give credits at once
+      (which is where the Give credits tab sends you). The address is the page, so the back button
+      and a pasted link both work.
+    */
+    const params = new URLSearchParams(location.search);
+    const account = document.getElementById('account');
+    if(params.get('user')) account.setAttribute('user-id', params.get('user'));
+    if(params.get('open')) account.setAttribute('open', params.get('open'));
+  </script>
+</content>
+</page>

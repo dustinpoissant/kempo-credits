@@ -275,9 +275,10 @@ double click applies once. Each needs a `note`, which the ledger keeps.
 
 **Admin → Commerce → Credits**, one tab per job, each behind its own permission:
 
-- **Balances** — find anybody; open one user to see their balance, every lot they were granted, every
-  change since, and the audit line that proves the balance from the ledger. Give, remove, claw back,
-  reverse and write off from there.
+- **Balances** — find anybody and open them. A user is a page of their own at
+  `/admin/extension/kempo-credits/account/?user=<id>` (so the back button and a pasted link work): their
+  balance, every lot they were granted, every change since, and the audit line that proves the balance
+  from the ledger. Give, remove, claw back, reverse and write off from there.
 - **Give credits** — find a user and give them credits, seeing what they already have.
 - **Settings**.
 

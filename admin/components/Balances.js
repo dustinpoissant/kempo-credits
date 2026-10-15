@@ -1,27 +1,25 @@
 import ShadowComponent from '/kempo-ui/components/ShadowComponent.js';
 import '/kempo-ui/components/Icon.js';
 import '/kempo-ui/components/Spinner.js';
-import '/admin/extension/kempo-credits/components/Account.js';
 import { html, css, nothing } from '/kempo-ui/lit-all.min.js';
 import { getSummary, listAccounts } from '/credits/sdk.js';
 import { formatCredits, formatDateTime } from '/credits/utils/format.js';
 
 /*
-  Every user's balance, and any one user's ledger.
+  Every user's balance. Each user is a link to their own page (/admin/extension/kempo-credits/account/),
+  with the ledger and the forms, so the address changes and the back button works.
 
   Search finds anybody by name, email or id — including people who have never had a credit, because
   "find this person" is the question that brings somebody here. With no search the list is the users
   who have a ledger, most recently active first. "Owing" narrows to users a refund took more credits
   from than they held: the ones that need a decision.
-
-  `user-id` opens straight onto one user, which is how a notification links here.
 */
 
 const PAGE = 25;
+const ACCOUNT = '/admin/extension/kempo-credits/account/';
 
 export default class Balances extends ShadowComponent {
   static properties = {
-    userId: { type: String, attribute: 'user-id' },
     accounts: { type: Array, state: true },
     total: { type: Number, state: true },
     offset: { type: Number, state: true },
@@ -36,7 +34,6 @@ export default class Balances extends ShadowComponent {
 
   constructor(){
     super();
-    this.userId = '';
     this.accounts = [];
     this.total = 0;
     this.offset = 0;
@@ -91,13 +88,9 @@ export default class Balances extends ShadowComponent {
     this.load();
   };
 
-  open = userId => {
-    this.userId = userId;
-  };
-
-  back = () => {
-    this.userId = '';
-    this.load();
+  /* A click anywhere on the row goes to the same address as the link in it. */
+  go = userId => {
+    location.assign(`${ACCOUNT}?user=${encodeURIComponent(userId)}`);
   };
 
   /*
@@ -140,9 +133,11 @@ export default class Balances extends ShadowComponent {
           </thead>
           <tbody>
             ${this.accounts.map(account => html`
-              <tr @click=${() => this.open(account.userId)}>
+              <tr @click=${() => this.go(account.userId)}>
                 <td>
-                  ${account.name ? html`<button class="link">${account.name}</button>` : html`<span class="tc-muted">No such user</span>`}
+                  ${account.name
+                    ? html`<a href="${ACCOUNT}?user=${encodeURIComponent(account.userId)}" @click=${event => event.stopPropagation()}>${account.name}</a>`
+                    : html`<a href="${ACCOUNT}?user=${encodeURIComponent(account.userId)}" @click=${event => event.stopPropagation()}><span class="tc-muted">No such user</span></a>`}
                   <span class="tc-muted d-b">${account.email || account.userId}</span>
                 </td>
                 <td class="ta-right ${account.total < 0 ? 'tc-danger' : ''}">
@@ -166,13 +161,6 @@ export default class Balances extends ShadowComponent {
   }
 
   render(){
-    if(this.userId){
-      return html`
-        <button class="link mb" @click=${this.back}><k-icon name="arrow" direction="left"></k-icon> All balances</button>
-        <k-cred-account user-id=${this.userId}></k-cred-account>
-      `;
-    }
-
     return html`
       ${this.#renderTiles()}
       <div class="d-f controls">

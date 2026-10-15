@@ -195,7 +195,7 @@ export const clawBackGrant = async ({ lotId, reference, amount, reason = 'clawba
         title: 'A user owes credits after a refund',
         message: `${clawed.clawedBack} credits were taken back but the user held only ${clawed.taken}, so they now owe ${clawed.owed} and cannot spend until that is covered or written off. Check whether this was a refund made outside the site, or a chargeback.`,
         dedupeKey: `shortfall:${userId}`,
-        url: `/admin/extension/kempo-credits/?user=${encodeURIComponent(userId)}`,
+        url: `/admin/extension/kempo-credits/account/?user=${encodeURIComponent(userId)}`,
       });
     }
 

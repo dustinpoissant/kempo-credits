@@ -34,8 +34,10 @@ through links, and a game can reward them.
   and every holder of `credits:view` is notified.
 - **Hooks**: `credits:granted`, `credits:spent`, `credits:transferred`, `credits:reversed`,
   `credits:clawed-back`, `credits:low` (once per crossing of `low_balance_threshold`).
-- **Admin** under Commerce: Balances (with each user's lots, ledger and audit), Give credits and
-  Settings, each behind its own permission; a dashboard widget.
+- **Admin** under Commerce: Balances, Give credits and Settings, each behind its own permission; a
+  dashboard widget. A user's lots, ledger and audit are a page of their own
+  (`/admin/extension/kempo-credits/account/?user=`), reached by a real link, so the address changes and
+  the back button returns to the list.
 - **The user's page** `/credits/` and the components `<k-cred-balance>`, `<k-cred-history>` and
   `<k-cred-send>`.
 - **Tests**: a unit tier on PGlite, an integration tier on Postgres, and a browser suite that builds a

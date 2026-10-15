@@ -62,13 +62,14 @@ locked: true
     };
 
     /*
-      Notifications link here with ?user= (one user's ledger), which wins over whichever tab was open
-      last time.
+      One user is a page of their own (account/). A link with ?user= on this page — a notification
+      made before that, say — goes there instead of breaking.
     */
     const params = new URLSearchParams(location.search);
-    const wanted = params.get('user') ? 'balances' : params.get('tab');
-
-    if(params.get('user')) document.getElementById('balances').userId = params.get('user');
+    if(params.get('user')){
+      location.replace(`/admin/extension/kempo-credits/account/?user=${encodeURIComponent(params.get('user'))}`);
+    }
+    const wanted = params.get('tab');
 
     if(tabs){
       if(wanted && visibility[wanted]) tabs.active = wanted;
