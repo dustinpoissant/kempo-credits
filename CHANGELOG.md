@@ -29,6 +29,7 @@ through links, and a game can reward them.
   updates underneath. Tested with parallel spends, parallel duplicate grants, racing transfers and
   crossing transfers, on PGlite and on a real Postgres, and mutation-checked: without the lock and the
   guard the double-spend test catches a real overspend, and unsorted locks deadlock.
+- **Claw backs can be previewed, and the shortfall is the caller's decision.** `previewClawBack` says how much a claw back would take and how much is short; `clawBackGrant` takes `ifShort: 'owe'` (default: the user owes the rest) or `'zero'` (take what they hold, leave nobody owing, close the grant). A refund screen should show the first and ask for the second.
 - **Shortfalls.** Credits taken back that a user no longer holds leave a recorded debt: spending is
   blocked until it is covered, any later grant pays it off first, an administrator can write it off,
   and every holder of `credits:view` is notified.

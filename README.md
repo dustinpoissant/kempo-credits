@@ -141,7 +141,8 @@ Imported from `kempo-credits/sdk`.
 | `spendCredits({ userId, amount, reason, reference, idempotencyKey, actorId?, note? })` | Takes credits in spending order. **402** if short; never goes negative; never partly spends. |
 | `transferCredits({ fromUserId, toUserId, amount, reason, reference?, idempotencyKey, actorId?, note? })` | Moves credits between two accounts as one operation. See [Transfers](#transfers). |
 | `reverseSpend({ userId, idempotencyKey, reason?, actorId?, note? })` | Returns what the spend under that key took, to the same lots. |
-| `clawBackGrant({ lotId \| reference, amount?, reason?, idempotencyKey?, actorId?, note? })` | Takes back a grant, or `amount` of it: from its own lot first, then the user's other credits. What neither covers is a **shortfall**. Reports `taken`, `fromOtherCredits`, `shortfall`, `owed`. |
+| `previewClawBack({ lotId \| reference, amount? })` | What a claw back would do, without doing it: `{ userId, claimable, wanted, held, takeable, shortfall }`. What an administrator approving a refund should see first. |
+| `clawBackGrant({ lotId \| reference, amount?, reason?, ifShort?, idempotencyKey?, actorId?, note? })` | Takes back a grant, or `amount` of it: from its own lot first, then the user's other credits. If they hold less than that, `ifShort` decides: `'owe'` (the default) records the rest as a **shortfall** they owe, `'zero'` takes what they hold and closes the grant, leaving nobody owing (`unrecovered`). Reports `taken`, `fromOtherCredits`, `shortfall`, `unrecovered`, `owed`. |
 | `getGrant({ lotId \| reference })` | A grant and how much of it has been taken back: `{ lot, clawed, removed, claimable }`. |
 | `removeCredits({ userId, amount, note?, idempotencyKey, actorId? })` | An administrator taking credits away, in spending order, never more than they have. |
 | `forgiveDebt({ userId, amount?, note?, idempotencyKey, actorId? })` | Writes off what a user owes — all of it, or `amount`. |
@@ -204,7 +205,7 @@ handlers in your own `kempo-config.json`:
 | `credits:spent` | `{ userId, operationId, amount, reason, reference, entries, balance }` | credits were spent |
 | `credits:transferred` | `{ fromUserId, toUserId, operationId, amount, reason, reference, settled, fromBalance, toBalance }` | credits moved between accounts |
 | `credits:reversed` | `{ userId, operationId, reversedOperationId, amount, reference, balance }` | a spend was undone |
-| `credits:clawed-back` | `{ userId, operationId, lot, removed, shortfall, settled, owed, balance }` | a grant was taken back |
+| `credits:clawed-back` | `{ userId, operationId, lot, taken, shortfall, unrecovered, owed, balance }` | a grant was taken back |
 | `credits:low` | `{ userId, balance, threshold }` | the balance dropped below `low_balance_threshold` — once per crossing |
 
 Each fires once per operation: a retry under the same key fires nothing. A handler that throws is
