@@ -161,13 +161,13 @@ const tests = {
 
     await account.getByRole('button', { name: 'Give credits' }).first().click();
     await account.getByLabel('Credits', { exact: true }).fill('150');
-    await account.getByLabel('Why (required').fill('Welcome bonus');
+    await account.getByLabel('Why').fill('Welcome bonus');
     await account.locator('form').getByRole('button', { name: 'Give credits' }).click();
     await account.getByText('Done.').waitFor();
 
     await account.getByRole('button', { name: 'Take credits away' }).click();
     await account.getByLabel('Credits', { exact: true }).fill('20');
-    await account.getByLabel('Why (required').fill('Granted twice by mistake');
+    await account.getByLabel('Why').fill('Granted twice by mistake');
     await account.getByRole('button', { name: 'Take them away' }).click();
     await account.getByText('Done.').waitFor();
 

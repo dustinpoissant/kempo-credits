@@ -16,7 +16,7 @@ import permissions from '/admin/extension/kempo-credits/components/permissions.j
   entries, not taken from a stored total — so it is what to show somebody who says their balance is
   wrong.
 
-  The corrections live here, each behind its own permission and each needing a note, because the
+  The corrections live here, each behind its own permission and each able to carry a note, because the
   note is what explains the entry to whoever reads this screen next: give credits
   (credits:grant); take credits away, write off what is owed, claw a grant back or reverse a spend
   (credits:adjust).
@@ -267,8 +267,8 @@ export default class Account extends ShadowComponent {
             </label>
           ` : nothing}
           <label class="span-8 m-span-12 px">
-            <span class="d-b">Why (required — this is what the ledger will say)</span>
-            <input type="text" required maxlength="500" .value=${this.form.note || ''} @input=${event => this.set('note', event.target.value)} />
+            <span class="d-b">Why <span class="tc-muted">(optional — the ledger will show it)</span></span>
+            <input type="text" maxlength="500" .value=${this.form.note || ''} @input=${event => this.set('note', event.target.value)} />
           </label>
         </div>
 

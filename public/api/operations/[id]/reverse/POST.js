@@ -16,7 +16,6 @@ export default async (request, response) => {
   if(operation.type !== 'spend' || !operation.idempotencyKey) return refuse(response, { code: 400, msg: 'Only a spend can be reversed' });
 
   const note = typeof request.body?.note === 'string' ? request.body.note : null;
-  if(!note?.trim()) return refuse(response, { code: 400, msg: 'Say why — the note is what explains this later' });
 
   const [error, result] = await reverseSpend({
     userId: operation.userId,

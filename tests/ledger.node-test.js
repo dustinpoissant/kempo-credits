@@ -407,10 +407,10 @@ export default {
     const [tooMuch] = await removeCredits({ userId: user, amount: 61, note: 'x', idempotencyKey: key() });
     if(tooMuch?.code !== 402) return fail('removed more than the user had');
     const [noNote] = await removeCredits({ userId: user, amount: 1, idempotencyKey: key() });
-    if(noNote?.code !== 400) return fail('a removal with no note was accepted');
+    if(noNote) return fail(`a removal with no note was refused: ${noNote.msg}`);
 
     const [, bought] = await grant(user, 100, { kind: 'paid' });
-    await spend(user, 160);
+    await spend(user, 159);
     await clawBackGrant({ lotId: bought.lot.id });
 
     const [, part] = await forgiveDebt({ userId: user, amount: 40, note: 'goodwill', idempotencyKey: key() });

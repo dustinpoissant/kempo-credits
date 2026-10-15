@@ -143,8 +143,8 @@ Imported from `kempo-credits/sdk`.
 | `reverseSpend({ userId, idempotencyKey, reason?, actorId?, note? })` | Returns what the spend under that key took, to the same lots. |
 | `clawBackGrant({ lotId \| reference, amount?, reason?, idempotencyKey?, actorId?, note? })` | Takes back a grant, or `amount` of it: from its own lot first, then the user's other credits. What neither covers is a **shortfall**. Reports `taken`, `fromOtherCredits`, `shortfall`, `owed`. |
 | `getGrant({ lotId \| reference })` | A grant and how much of it has been taken back: `{ lot, clawed, removed, claimable }`. |
-| `removeCredits({ userId, amount, note, idempotencyKey, actorId? })` | An administrator taking credits away, in spending order, never more than they have. |
-| `forgiveDebt({ userId, amount?, note, idempotencyKey, actorId? })` | Writes off what a user owes — all of it, or `amount`. |
+| `removeCredits({ userId, amount, note?, idempotencyKey, actorId? })` | An administrator taking credits away, in spending order, never more than they have. |
+| `forgiveDebt({ userId, amount?, note?, idempotencyKey, actorId? })` | Writes off what a user owes — all of it, or `amount`. |
 | `listEntries({ userId, type?, reference?, limit?, offset? })` | The ledger, newest first. |
 | `listLots({ userId })`, `getLot({ lotId })`, `getOperation({ operationId })` | Reads. |
 | `listAccounts({ search?, owing?, limit?, offset? })`, `creditTotals()` | Balances across users, and site-wide totals. |
@@ -247,7 +247,7 @@ and nothing else (except sending), and the user always comes from the session, n
 | `GET /settings`, `PUT /settings` | `credits:settings` |
 
 Administrative writes take an `idempotencyKey` in the body; the admin screens make one per form, so a
-double click applies once. Each needs a `note`, which the ledger keeps.
+double click applies once. A `note` is optional; when given, the ledger keeps it.
 
 ## Permissions and groups
 

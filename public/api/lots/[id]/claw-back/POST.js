@@ -11,7 +11,6 @@ export default async (request, response) => {
   if(gateError) return refuse(response, gateError);
 
   const body = request.body && typeof request.body === 'object' ? request.body : {};
-  if(typeof body.note !== 'string' || !body.note.trim()) return refuse(response, { code: 400, msg: 'Say why — the note is what explains this later' });
 
   const [error, result] = await clawBackGrant({
     lotId: request.params?.id,

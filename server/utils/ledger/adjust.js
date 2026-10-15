@@ -21,8 +21,8 @@ const prepare = ({ userId, amount, note, idempotencyKey }, { amountRequired }) =
     const [amountError] = cleanAmount(amount);
     if(amountError) return [amountError, null];
   }
-  const [noteError, cleanNote] = cleanText(note, 'A note', { required: true });
-  if(noteError) return [{ code: 400, msg: 'Say why — the note is what explains this entry later' }, null];
+  const [noteError, cleanNote] = cleanText(note, 'A note');
+  if(noteError) return [noteError, null];
   const [keyError, key] = cleanKey(idempotencyKey);
   if(keyError) return [keyError, null];
   return [null, { user, note: cleanNote, key }];
