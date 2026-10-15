@@ -3,7 +3,7 @@ import { kempoCreditEntry, kempoCreditLot } from '../server/db/schema.js';
 import grantCredits from '../server/utils/ledger/grant.js';
 import spendCredits from '../server/utils/ledger/spend.js';
 import reverseSpend from '../server/utils/ledger/reverse.js';
-import { clawBackGrant } from '../server/utils/ledger/clawback.js';
+import { clawBackGrant, previewClawBack } from '../server/utils/ledger/clawback.js';
 import { forgiveDebt, removeCredits } from '../server/utils/ledger/adjust.js';
 import { auditAccount, getBalance, getLot, getOperation, listEntries } from '../server/utils/ledger/read.js';
 import { db } from './helpers/db.js';
@@ -393,6 +393,89 @@ export default {
     await grant(user, 10, { reference });
     const [error] = await clawBackGrant({ reference });
     if(error?.code !== 409) return fail(`got ${error?.code ?? 'success'}`);
+    pass('');
+  },
+
+  /*
+    Taking back credits that were partly spent is an administrator's decision, so it can be looked at
+    first and then made either way: leave the account owing, or take what is there and stop.
+  */
+  'a claw back can be previewed before it is made': async ({ pass, fail }) => {
+    const user = freshUser();
+    const reference = { owner: 'test', ref: `preview-${key()}` };
+    await grant(user, 500, { reference });
+    await spend(user, 200);
+
+    const [error, preview] = await previewClawBack({ reference });
+    if(error) return fail(error.msg);
+    if(preview.claimable !== 500 || preview.held !== 300 || preview.takeable !== 300 || preview.shortfall !== 200) return fail(JSON.stringify(preview));
+    if(preview.userId !== user) return fail('the preview does not say whose it is');
+
+    const [, half] = await previewClawBack({ reference, amount: 100 });
+    if(half.wanted !== 100 || half.shortfall !== 0) return fail(`a partial preview: ${JSON.stringify(half)}`);
+
+    const [, balance] = await getBalance({ userId: user });
+    if(balance.total !== 300) return fail('previewing changed the balance');
+    pass('');
+  },
+
+  'ifShort zero takes what they hold, leaves nobody owing, and closes the grant': async ({ pass, fail }) => {
+    const user = freshUser();
+    const reference = { owner: 'test', ref: `zero-${key()}` };
+    await grant(user, 500, { reference });
+    await spend(user, 200);
+
+    const [error, result] = await clawBackGrant({ reference, ifShort: 'zero', idempotencyKey: key() });
+    if(error) return fail(error.msg);
+    if(result.taken !== 300 || result.shortfall !== 0 || result.unrecovered !== 200) return fail(JSON.stringify({ taken: result.taken, shortfall: result.shortfall, unrecovered: result.unrecovered }));
+    if(result.balance.total !== 0 || result.balance.owed !== 0) return fail(`balance ${JSON.stringify(result.balance)}`);
+
+    const [closed] = await clawBackGrant({ reference, ifShort: 'zero' });
+    if(closed?.code !== 409) return fail(`a second claw back gave ${closed?.code}`);
+
+    /* What they earn afterwards is theirs. */
+    await grant(user, 100);
+    const [stillClosed] = await clawBackGrant({ reference });
+    if(stillClosed?.code !== 409) return fail('a closed grant took later credits');
+    const [, balance] = await getBalance({ userId: user });
+    if(balance.total !== 100) return fail(`the balance is ${balance.total}`);
+
+    if(!await check(user, fail)) return;
+    pass('');
+  },
+
+  'ifShort owe, the default, still leaves them owing': async ({ pass, fail }) => {
+    const user = freshUser();
+    const reference = { owner: 'test', ref: `owe-${key()}` };
+    await grant(user, 500, { reference });
+    await spend(user, 200);
+
+    const [error, result] = await clawBackGrant({ reference });
+    if(error) return fail(error.msg);
+    if(result.taken !== 300 || result.shortfall !== 200 || result.owed !== 200 || result.balance.total !== -200) return fail(JSON.stringify(result.balance));
+    pass('');
+  },
+
+  'ifShort zero with nothing held is recognised on a retry': async ({ pass, fail }) => {
+    const user = freshUser();
+    const reference = { owner: 'test', ref: `none-${key()}` };
+    await grant(user, 100, { reference });
+    await spend(user, 100);
+
+    const idempotencyKey = key();
+    const [error, first] = await clawBackGrant({ reference, ifShort: 'zero', idempotencyKey });
+    if(error) return fail(error.msg);
+    if(first.taken !== 0 || first.unrecovered !== 100) return fail(JSON.stringify({ taken: first.taken, unrecovered: first.unrecovered }));
+
+    const [retryError, retry] = await clawBackGrant({ reference, ifShort: 'zero', idempotencyKey });
+    if(retryError || !retry.duplicate) return fail(`a retry was not recognised: ${JSON.stringify(retryError || retry.duplicate)}`);
+
+    const [badError] = await clawBackGrant({ reference, ifShort: 'forgive' });
+    if(badError?.code !== 400) return fail(`an unknown ifShort gave ${badError?.code}`);
+
+    const [, ledger] = await listEntries({ userId: user });
+    if(!ledger.entries.some(entry => entry.type === 'forfeit' && entry.amount === 0)) return fail('nothing in the ledger says the grant was closed');
+    if(!await check(user, fail)) return;
     pass('');
   },
 

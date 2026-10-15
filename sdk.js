@@ -49,7 +49,7 @@ export { default as grantCredits } from './server/utils/ledger/grant.js';
 export { default as spendCredits } from './server/utils/ledger/spend.js';
 export { default as transferCredits } from './server/utils/ledger/transfer.js';
 export { default as reverseSpend } from './server/utils/ledger/reverse.js';
-export { clawBackGrant, getGrant } from './server/utils/ledger/clawback.js';
+export { clawBackGrant, getGrant, previewClawBack } from './server/utils/ledger/clawback.js';
 export { removeCredits, forgiveDebt } from './server/utils/ledger/adjust.js';
 export { getBalance, getLot, listLots, listEntries, getOperation, listAccounts, auditAccount, creditTotals } from './server/utils/ledger/read.js';
 export { EVENTS } from './server/utils/ledger/events.js';

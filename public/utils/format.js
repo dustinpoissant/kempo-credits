@@ -23,6 +23,7 @@ export const ENTRY_LABELS = {
   reversal: 'Returned',
   clawback: 'Taken back',
   shortfall: 'Owed after a refund',
+  forfeit: 'Could not be taken back',
   settlement: 'Applied to amount owed',
   removal: 'Removed',
   forgiveness: 'Written off',

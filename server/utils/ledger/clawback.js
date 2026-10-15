@@ -4,7 +4,7 @@ import { kempoCreditEntry, kempoCreditLot } from '../../db/schema.js';
 import { readConfig } from '../config/settings.js';
 import newId from '../ids.js';
 import { crossedLow, fire, notifyAdmins } from './events.js';
-import { balanceIn, findOperation, spendableLots, writeOperation } from './lots.js';
+import { balanceIn, findOperation, spendableLots, summarise, writeOperation } from './lots.js';
 import { abort, withUserLocks } from './transaction.js';
 import { cleanAmount, cleanKey, cleanReference, cleanText } from './validate.js';
 
@@ -28,6 +28,18 @@ import { cleanAmount, cleanKey, cleanReference, cleanText } from './validate.js'
   until credits granted later have paid it off or an administrator writes it off; and every person
   who can see credits is notified.
 
+  **What if they have already spent some?** That is the caller's decision, passed as `ifShort`:
+
+  - `'owe'` (the default): take what they hold and record the rest as a **shortfall** — the balance
+    goes below zero, spending is blocked until later credits pay it off or an administrator writes
+    it off, and every person who can see credits is notified. The user then owes the credits.
+  - `'zero'`: take what they hold and leave it there. Their balance is zero and nobody owes
+    anything; the part that was already spent is `unrecovered` in the result and the hook, and
+    the grant is closed so credits they earn later are never taken for it.
+
+  `previewClawBack` says beforehand how much would be taken and how much is short, which is what
+  an administrator approving a refund needs to see.
+
   How much of a grant is already back is counted from the entries that name it
   (`reversesOperationId`), wherever they took credits from. Credits an administrator removed from
   the lot were never used by anybody and are not counted against the user. A grant with nothing left
@@ -47,9 +59,52 @@ export const grantState = async (handle, lot) => {
     .where(and(eq(kempoCreditEntry.reversesOperationId, lot.operationId), inArray(kempoCreditEntry.type, TAKEN)));
   const removed = await handle.select().from(kempoCreditEntry)
     .where(and(eq(kempoCreditEntry.lotId, lot.id), eq(kempoCreditEntry.type, 'removal')));
+  const closing = await handle.select().from(kempoCreditEntry)
+    .where(and(eq(kempoCreditEntry.reversesOperationId, lot.operationId), eq(kempoCreditEntry.type, 'forfeit')));
   const clawed = sumOf(taken);
   const gone = sumOf(removed);
-  return { clawed, removed: gone, claimable: Math.max(0, lot.amount - clawed - gone) };
+  const closed = closing.length > 0;
+  return { clawed, removed: gone, closed, claimable: closed ? 0 : Math.max(0, lot.amount - clawed - gone) };
+};
+
+/*
+  What a claw back would do right now, without doing it: how many credits are still to be taken
+  back for the grant (`claimable`, or `amount` if less), how many of the user's credits are there
+  to take (`held`), and so how many it would take (`takeable`) and how many are `shortfall` — the
+  ones they have already spent. The answer is a moment in time; the claw back itself is what holds
+  the user's lock.
+*/
+export const previewClawBack = async ({ lotId, reference, amount } = {}) => {
+  const [cleanError, cleanRef] = cleanReference(lotId ? null : reference);
+  if(cleanError) return [cleanError, null];
+  if(!lotId && !cleanRef) return [{ code: 400, msg: 'Say which grant: a lotId or its reference' }, null];
+  if(amount !== undefined && amount !== null){
+    const [amountError] = cleanAmount(amount);
+    if(amountError) return [amountError, null];
+  }
+
+  const [error, lot] = await findLot({ lotId, reference: cleanRef });
+  if(error) return [error, null];
+
+  try {
+    const state = await grantState(db, lot);
+    const lots = await db.select().from(kempoCreditLot).where(eq(kempoCreditLot.userId, lot.userId));
+    const held = lots.reduce((sum, row) => sum + Math.max(0, row.remaining), 0);
+    const wanted = amount ? Math.min(amount, state.claimable) : state.claimable;
+    const takeable = Math.min(wanted, held);
+    return [null, {
+      userId: lot.userId,
+      lot,
+      claimable: state.claimable,
+      wanted,
+      held,
+      takeable,
+      shortfall: wanted - takeable,
+      balance: summarise(lots),
+    }];
+  } catch {
+    return [{ code: 500, msg: 'Could not preview the claw back' }, null];
+  }
 };
 
 /*
@@ -91,7 +146,8 @@ export const findLot = async ({ lotId, reference }) => {
   }
 };
 
-export const clawBackGrant = async ({ lotId, reference, amount, reason = 'clawback', idempotencyKey, actorId = null, note = null } = {}) => {
+export const clawBackGrant = async ({ lotId, reference, amount, reason = 'clawback', ifShort = 'owe', idempotencyKey, actorId = null, note = null } = {}) => {
+  if(!['owe', 'zero'].includes(ifShort)) return [{ code: 400, msg: "ifShort is 'owe' or 'zero'" }, null];
   if(!lotId && !reference) return [{ code: 400, msg: 'Say which grant to claw back: a lotId or its reference' }, null];
   if(lotId && typeof lotId !== 'string') return [{ code: 400, msg: 'That is not a lot id' }, null];
 
@@ -120,12 +176,12 @@ export const clawBackGrant = async ({ lotId, reference, amount, reason = 'clawba
       const existing = await findOperation(tx, userId, key);
       if(existing){
         const { first, entries } = existing;
-        if(!TAKEN.includes(first.type)) abort(409, `That idempotency key was already used for a ${first.type}, not a claw back`);
+        if(!TAKEN.includes(first.type) && first.type !== 'forfeit') abort(409, `That idempotency key was already used for a ${first.type}, not a claw back`);
         const [lot] = await tx.select().from(kempoCreditLot).where(eq(kempoCreditLot.id, found.id));
         const balance = await balanceIn(tx, userId);
         const taken = sumOf(entries.filter(entry => entry.type === 'clawback'));
         const shortfall = sumOf(entries.filter(entry => entry.type === 'shortfall'));
-        return [null, { duplicate: true, operationId: first.operationId, lot, clawedBack: taken + shortfall, taken, shortfall, owed: balance.owed, balance, before: balance }];
+        return [null, { duplicate: true, operationId: first.operationId, lot, clawedBack: taken + shortfall, taken, shortfall, unrecovered: null, owed: balance.owed, balance, before: balance }];
       }
     }
 
@@ -149,13 +205,37 @@ export const clawBackGrant = async ({ lotId, reference, amount, reason = 'clawba
       moves.push({ lotId: source.id, type: 'clawback', amount: -take });
       left -= take;
     }
-    if(left > 0) moves.push({ lotId: lot.id, type: 'shortfall', amount: -left });
+    if(left > 0 && ifShort === 'owe') moves.push({ lotId: lot.id, type: 'shortfall', amount: -left });
 
     const operationId = newId('op');
     const reference = lot.referenceOwner ? { owner: lot.referenceOwner, ref: lot.referenceId } : null;
     const entries = await writeOperation(tx, {
       userId, operationId, key, reason: cleanReason, reference, reversesOperationId: lot.operationId, actorId, note: cleanNote, now,
     }, moves);
+
+    /*
+      Taking only what they hold: a zero-amount entry says "this grant is finished". It moves nothing,
+      so every lot still equals the sum of its entries; it takes the idempotency key when nothing else
+      did, so a retry is recognised even when the user held nothing at all.
+    */
+    if(left > 0 && ifShort === 'zero'){
+      await tx.insert(kempoCreditEntry).values({
+        id: newId('ent'),
+        userId,
+        lotId: lot.id,
+        operationId,
+        type: 'forfeit',
+        amount: 0,
+        reason: cleanReason,
+        referenceOwner: reference?.owner ?? null,
+        referenceId: reference?.ref ?? null,
+        idempotencyKey: entries.length === 0 ? key : null,
+        reversesOperationId: lot.operationId,
+        actorId,
+        note: cleanNote,
+        createdAt: new Date(now.getTime() + entries.length),
+      });
+    }
 
     const [after] = await tx.select().from(kempoCreditLot).where(eq(kempoCreditLot.id, lot.id));
     const balance = await balanceIn(tx, userId);
@@ -168,7 +248,8 @@ export const clawBackGrant = async ({ lotId, reference, amount, reason = 'clawba
       clawedBack: wanted,
       taken,
       fromOtherCredits: sumOf(entries.filter(entry => entry.type === 'clawback' && entry.lotId !== lot.id)),
-      shortfall: left,
+      shortfall: ifShort === 'owe' ? left : 0,
+      unrecovered: ifShort === 'zero' ? left : 0,
       owed: balance.owed,
       balance,
       before,
@@ -186,6 +267,7 @@ export const clawBackGrant = async ({ lotId, reference, amount, reason = 'clawba
       lot: clawed.lot,
       taken: clawed.taken,
       shortfall: clawed.shortfall,
+      unrecovered: clawed.unrecovered,
       owed: clawed.owed,
       balance: clawed.balance,
     });

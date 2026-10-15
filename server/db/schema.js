@@ -84,6 +84,7 @@ export const kempoCreditLot = pgTable('kempoCreditLot', {
   |               |      | then from the user's other credits                                    |
   | `shortfall`   | -    | what a refund could not take back: the lot goes below zero            |
   | `settlement`  | ±    | credits moved from a positive lot to pay off a negative one           |
+  | `forfeit`     | 0    | a claw back that took what the user held and no more: the grant is closed |
   | `removal`     | -    | an administrator taking credits away                                  |
   | `transfer_out`| -    | credits sent to another user, drawn from the sender's lots            |
   | `transfer_in` | +    | credits received: the lot being created, on the recipient's side      |
