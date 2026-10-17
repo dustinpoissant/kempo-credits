@@ -4,6 +4,14 @@ All notable changes to `kempo-credits` are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **The account page shows the customer's credits** and a **Credit history** button, through the account page's new `account-details` and `account-links` places (`public/account.global.html`).
+
+### Changed
+
+- Its menu entry is in the **Payments** group, after Payments (priority 78), instead of Commerce.
+
 The first working release. It is the ledger, and only the ledger: how credits are obtained is up to
 whatever calls `grantCredits` — kempo-credit-packs sells them, kempo-credit-claims hands them out
 through links, and a game can reward them.

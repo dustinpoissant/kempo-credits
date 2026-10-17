@@ -8,7 +8,7 @@
       "key": "summary",
       "title": "Credits",
       "description": "Credits held by users, and anyone who owes credits after a refund.",
-      "icon": "toll",
+      "iconSrc": "/credits/icons/credits.svg",
       "element": "k-cred-widget",
       "module": "/credits/components/CreditsWidget.js",
       "defaultWidth": 2,

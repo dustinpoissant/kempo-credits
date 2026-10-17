@@ -49,7 +49,7 @@ Install it from the admin's **Extensions** screen. Installing:
 
 - creates the two tables and their indexes, including the unique one that makes retries safe;
 - registers the **Credits** dashboard widget, the permissions and groups below, and the admin
-  screen under **Commerce**.
+  screen under **Payments**.
 
 A user's own page is at `/credits/`. To let people *buy* credits, install
 [kempo-credit-packs](https://github.com/dustinpoissant/kempo-credit-packs).
@@ -274,7 +274,9 @@ double click applies once. A `note` is optional; when given, the ledger keeps it
 
 ## Admin
 
-**Admin → Commerce → Credits**, one tab per job, each behind its own permission:
+A customer sees their credits on their account page, with a **Credit history** button to `/credits/` (added to the account page's `account-details` and `account-links` places).
+
+**Admin → Payments → Credits**, one tab per job, each behind its own permission:
 
 - **Balances** — find anybody and open them. A user is a page of their own at
   `/admin/extension/kempo-credits/account/?user=<id>` (so the back button and a pasted link work): their

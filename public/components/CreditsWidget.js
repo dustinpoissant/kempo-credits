@@ -16,7 +16,7 @@ export default class CreditsWidget extends DashboardWidget {
   constructor(){
     super();
     this.summary = null;
-    this.cta = { label: 'View credits', icon: 'toll', href: '/admin/extension/kempo-credits/' };
+    this.cta = { label: 'View credits', iconSrc: '/credits/icons/credits.svg', href: '/admin/extension/kempo-credits/' };
   }
 
   /*

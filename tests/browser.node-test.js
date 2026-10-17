@@ -143,12 +143,12 @@ const tests = {
     pass('');
   },
 
-  'the nav links to the screen, under Commerce': async ({ pass, fail }) => {
+  'the nav links to the screen, under Payments': async ({ pass, fail }) => {
     const page = await newPage('admin');
     await page.goto(`${state.server.base}/admin/`);
     const link = page.locator('k-aside-item[href="/admin/extension/kempo-credits/"]');
     if(!await link.count()) return fail('no Credits link in the admin nav');
-    if(await link.getAttribute('group') !== 'Commerce') return fail('the link is not in the Commerce group');
+    if(await link.getAttribute('group') !== 'Payments') return fail('the link is not in the Payments group');
     await page.context().close();
     pass('');
   },

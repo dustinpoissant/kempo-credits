@@ -64,7 +64,7 @@ export default class Balance extends ShadowComponent {
     const kinds = Object.entries(byKind || {});
 
     if(this.compact){
-      return html`<span title="Your credits"><k-icon name="toll"></k-icon> ${formatCredits(total)}</span>`;
+      return html`<span title="Your credits"><k-icon src="/credits/icons/credits.svg"></k-icon> ${formatCredits(total)}</span>`;
     }
 
     return html`
