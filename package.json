@@ -39,6 +39,9 @@
     "kempo-server": ">=3.3.0",
     "kempo-ui": ">=0.6.0"
   },
+  "peerDependenciesMeta": {
+    "kempo-products": { "optional": true }
+  },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.9",
     "drizzle-kit": "^0.31.10",

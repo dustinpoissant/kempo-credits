@@ -6,6 +6,7 @@ All notable changes to `kempo-credits` are documented in this file.
 
 ### Added
 
+- Registers the **Credits Only** product type (`credits-only`, no shipping) on install and update, so a credit pack is sold as that product type. kempo-products is optional: credits still work without it, and the type is registered when it is there.
 - **The account page shows the customer's credits** and a **Credit history** button, through the account page's new `account-details` and `account-links` places (`public/account.global.html`).
 
 ### Changed

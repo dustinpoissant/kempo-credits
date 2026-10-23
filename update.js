@@ -1,3 +1,4 @@
+import { registerCreditsProductType } from './install.js';
 import { deleteSetting } from 'kempo/server/sdk.js';
 import { createIndexes, ensureColumns } from './server/db/indexes.js';
 
@@ -20,5 +21,6 @@ const RETIRED = [
 export default async () => {
   await ensureColumns();
   await createIndexes();
+  await registerCreditsProductType();
   for(const name of RETIRED) await deleteSetting('kempo-credits', name);
 };
