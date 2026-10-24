@@ -3,7 +3,7 @@
   "version": "0.3.0",
   "description": "An in-app currency ledger for kempo — balances, an append-only history, transfers between users, and an SDK other extensions use to create and spend credits",
   "license": "MIT",
-  "author": "Dustin Poissant",
+  "author": "Dustin Poissant <dustinpoissant@gmail.com>",
   "type": "module",
   "main": "sdk.js",
   "scripts": {
