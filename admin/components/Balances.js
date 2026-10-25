@@ -50,7 +50,12 @@ export default class Balances extends ShadowComponent {
 
   connectedCallback(){
     super.connectedCallback();
-    this.load();
+const pane = this.closest('k-tab-content');
+    // Loads when its tab is first opened, so a tab nobody opens makes no requests.
+    if(!pane || pane.active) this.load();
+    else this.closest('k-tabs')?.addEventListener('tabfirstshown', ({ detail }) => {
+      if(detail.tab === pane.name) this.load();
+    });
   }
 
   /*
