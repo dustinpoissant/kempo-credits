@@ -1,6 +1,6 @@
 {
   "name": "kempo-credits",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "An in-app currency ledger for kempo — balances, an append-only history, transfers between users, and an SDK other extensions use to create and spend credits",
   "license": "MIT",
   "author": "Dustin Poissant <dustinpoissant@gmail.com>",
