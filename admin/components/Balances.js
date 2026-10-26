@@ -1,6 +1,8 @@
 import ShadowComponent from '/kempo-ui/components/ShadowComponent.js';
 import '/kempo-ui/components/Icon.js';
 import '/kempo-ui/components/Spinner.js';
+import '/kempo-ui/components/Table.js';
+import '/kempo-ui/components/controls/TcOpen.js';
 import { html, css, nothing } from '/kempo-ui/lit-all.min.js';
 import { getSummary, listAccounts } from '/credits/sdk.js';
 import { formatCredits, formatDateTime } from '/credits/utils/format.js';
@@ -17,6 +19,16 @@ import { formatCredits, formatDateTime } from '/credits/utils/format.js';
 
 const PAGE = 25;
 const ACCOUNT = '/admin/extension/kempo-credits/account/';
+
+const fields = [
+  { name: 'name', label: 'User', editable: false, calculator: account => account.name || 'No such user' },
+  { name: 'email', label: 'Email', size: 260, editable: false, calculator: account => account.email || account.userId },
+  {
+    name: 'total', label: 'Balance', size: 200, editable: false,
+    calculator: account => `${formatCredits(account.total)}${account.owed ? ` · owes ${formatCredits(account.owed)}` : ''}`,
+  },
+  { name: 'lastActivity', label: 'Last change', size: 180, editable: false, formatter: v => v ? formatDateTime(v) : 'Never' },
+];
 
 export default class Balances extends ShadowComponent {
   static properties = {
@@ -93,10 +105,13 @@ const pane = this.closest('k-tab-content');
     this.load();
   };
 
-  /* A click anywhere on the row goes to the same address as the link in it. */
-  go = userId => {
-    location.assign(`${ACCOUNT}?user=${encodeURIComponent(userId)}`);
-  };
+  updated(changed){
+    if(!changed.has('accounts')) return;
+    this.renderRoot.querySelector('k-table')?.setData({
+      records: this.accounts.map(account => ({ ...account, _url: `${ACCOUNT}?user=${encodeURIComponent(account.userId)}` })),
+      fields,
+    });
+  }
 
   /*
     Rendering
@@ -131,30 +146,9 @@ const pane = this.closest('k-tab-content');
     }
 
     return html`
-      <div class="table-wrapper">
-        <table>
-          <thead>
-            <tr><th>User</th><th class="ta-right">Balance</th><th>Last change</th></tr>
-          </thead>
-          <tbody>
-            ${this.accounts.map(account => html`
-              <tr @click=${() => this.go(account.userId)}>
-                <td>
-                  ${account.name
-                    ? html`<a href="${ACCOUNT}?user=${encodeURIComponent(account.userId)}" @click=${event => event.stopPropagation()}>${account.name}</a>`
-                    : html`<a href="${ACCOUNT}?user=${encodeURIComponent(account.userId)}" @click=${event => event.stopPropagation()}><span class="tc-muted">No such user</span></a>`}
-                  <span class="tc-muted d-b">${account.email || account.userId}</span>
-                </td>
-                <td class="ta-right ${account.total < 0 ? 'tc-danger' : ''}">
-                  ${formatCredits(account.total)}
-                  ${account.owed ? html`<span class="d-b">owes ${formatCredits(account.owed)}</span>` : nothing}
-                </td>
-                <td class="tc-muted">${account.lastActivity ? formatDateTime(account.lastActivity) : 'Never'}</td>
-              </tr>
-            `)}
-          </tbody>
-        </table>
-      </div>
+      <k-table open-on-click>
+        <kc-tc-open slot="before"></kc-tc-open>
+      </k-table>
       ${this.total > PAGE ? html`
         <div class="d-f pager">
           <button ?disabled=${this.offset === 0} @click=${() => this.page(-1)}>Previous</button>
@@ -187,8 +181,6 @@ const pane = this.closest('k-tab-content');
     .controls { margin-bottom: var(--spacer); }
     .controls input[type="search"] { margin: 0; max-width: 24rem; }
     .controls label { margin: 0; }
-    tbody tr { cursor: pointer; }
-    tbody tr:hover { background: var(--c_bg__alt); }
   `;
 }
 

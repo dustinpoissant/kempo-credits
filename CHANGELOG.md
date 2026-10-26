@@ -66,3 +66,9 @@ By the owner (2026-10-14):
 - **Transfers** between accounts exist, for trading and gifting.
 - **Bought credits are transferable immediately** (no holding period), gifting is behind
   `credits:transfer` with an API and no built-in public page, and there is **no site cut** on transfers.
+
+## [0.3.2] - 2026-10-26
+### Changed
+- A user's grants and ledger are kempo-ui tables. Claw back and Reverse are row controls, and the ledger keeps its server paging.
+- The balances list is a table.
+- Requires kempo 4.9.7 (the admin lists use kempo-ui tables).

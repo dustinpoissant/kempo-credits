@@ -35,9 +35,9 @@
     "drizzle-orm": "^0.45.2"
   },
   "peerDependencies": {
-    "kempo": ">=4.9.6",
+    "kempo": ">=4.9.7",
     "kempo-server": ">=3.3.0",
-    "kempo-ui": ">=0.6.2"
+    "kempo-ui": ">=0.7.0"
   },
   "peerDependenciesMeta": {
     "kempo-products": {

@@ -1,6 +1,14 @@
 import ShadowComponent from '/kempo-ui/components/ShadowComponent.js';
 import '/kempo-ui/components/Icon.js';
 import '/kempo-ui/components/Spinner.js';
+import '/kempo-ui/components/Table.js';
+import '/kempo-ui/components/controls/TcFirstPage.js';
+import '/kempo-ui/components/controls/TcPrevPage.js';
+import '/kempo-ui/components/controls/TcNextPage.js';
+import '/kempo-ui/components/controls/TcLastPage.js';
+import '/kempo-ui/components/controls/TcPageSelect.js';
+import '/kempo-ui/components/controls/TcPageSize.js';
+import './CreditsRowAction.js';
 import { html, css, nothing } from '/kempo-ui/lit-all.min.js';
 import {
   clawBackLot, forgiveDebt, getAccount, grantCredits, listAccountEntries, newKey, removeCredits, reverseOperation,
@@ -84,6 +92,8 @@ export default class Account extends ShadowComponent {
   updated(changed){
     super.updated?.(changed);
     if(changed.has('userId') && changed.get('userId') !== undefined) this.load();
+    if(changed.has('account') || changed.has('allowed')) this.fillLots();
+    if(changed.has('entries') || changed.has('allowed')) this.fillLedger();
   }
 
   /*
@@ -283,85 +293,103 @@ export default class Account extends ShadowComponent {
     `;
   }
 
+  /*
+    The lots and the ledger tables. Each row carries the actions it may take, so a row's button appears only where it applies.
+  */
+
+  lotRecords(){
+    const canAdjust = this.allowed.has('credits:adjust');
+    return this.account.lots.map(lot => ({ ...lot, actions: canAdjust ? ['clawback'] : [] }));
+  }
+
+  lotFields(){
+    return [
+      { name: 'createdAt', label: 'Granted', size: 180, editable: false, formatter: formatDateTime },
+      { name: 'kind', label: 'Kind', size: 150, editable: false, calculator: lot => kindLabel(lot.kind) },
+      { name: 'amount', label: 'Amount', size: 120, editable: false, calculator: lot => formatCredits(lot.amount) },
+      { name: 'remaining', label: 'Left', size: 120, editable: false, calculator: lot => formatCredits(lot.remaining) },
+      { name: 'why', label: 'Why', editable: false, calculator: lot => [lot.reason, lot.referenceOwner ? `· ${lot.referenceOwner} ${lot.referenceId}` : '', lot.note].filter(Boolean).join(' ') },
+    ];
+  }
+
+  /* A spend drawn from several lots is several entries in one operation. Reverse goes on the first of them only, since reversing undoes the whole operation. */
+  ledgerRecords(entries){
+    const canAdjust = this.allowed.has('credits:adjust');
+    const shownSpends = new Set();
+    return entries.map(entry => {
+      const reversible = canAdjust && entry.type === 'spend' && !shownSpends.has(entry.operationId);
+      if(entry.type === 'spend') shownSpends.add(entry.operationId);
+      const operationAmount = entries.filter(other => other.operationId === entry.operationId && other.type === 'spend').reduce((sum, other) => sum - other.amount, 0);
+      return { ...entry, actions: reversible ? ['reverse'] : [], operationAmount };
+    });
+  }
+
+  ledgerFields(){
+    return [
+      { name: 'createdAt', label: 'When', size: 180, editable: false, formatter: formatDateTime },
+      { name: 'what', label: 'What', size: 240, editable: false, calculator: entry => `${entryLabel(entry.type)}${entry.counterpartyId ? ` ${entry.type === 'transfer_out' ? 'to' : 'from'} ${this.counterparties[entry.counterpartyId]?.name || entry.counterpartyId}` : ''} · ${kindLabel(entry.kind)}` },
+      { name: 'amount', label: 'Credits', size: 120, editable: false, calculator: entry => signed(entry.amount) },
+      { name: 'why', label: 'Why', editable: false, calculator: entry => [entry.reason, entry.referenceOwner ? `· ${entry.referenceOwner} ${entry.referenceId}` : '', entry.note, entry.reversesOperationId ? `reverses ${entry.reversesOperationId}` : ''].filter(Boolean).join(' ') },
+      { name: 'by', label: 'By', size: 170, editable: false, calculator: entry => !entry.actorId ? 'The site' : this.actors[entry.actorId]?.name || entry.actorId },
+    ];
+  }
+
+  /* The ledger pages from the server: each page brings the names it needs, and the table asks for the next page as it is shown. */
+  fetchLedger = async (start, count) => {
+    const [error, ledger] = await listAccountEntries(this.userId, { limit: count, offset: start });
+    if(error) return [];
+    this.actors = { ...this.actors, ...(ledger.actors || {}) };
+    this.counterparties = { ...this.counterparties, ...(ledger.counterparties || {}) };
+    return this.ledgerRecords(ledger.entries || []);
+  };
+
+  fillLots(){
+    if(!this.account) return;
+    this.renderRoot.querySelector('#lotsTable')?.setData({ records: this.lotRecords(), fields: this.lotFields() });
+  }
+
+  fillLedger(){
+    const $ledger = this.renderRoot.querySelector('#ledgerTable');
+    if(!$ledger) return;
+    $ledger.setData({ records: this.ledgerRecords(this.entries), fields: this.ledgerFields() });
+    $ledger.setupFetchRecords(this.entryTotal, this.fetchLedger);
+  }
+
+  rowAction = ({ action, record }) => {
+    if(action === 'clawback') this.openTarget({ kind: 'lot', id: record.id, label: `${formatCredits(record.amount)} ${kindLabel(record.kind).toLowerCase()} credits from ${formatDate(record.createdAt)}` });
+    else if(action === 'reverse') this.openTarget({ kind: 'spend', id: record.operationId, amount: record.operationAmount });
+  };
+
   #renderLots(){
     const { lots } = this.account;
     if(!lots.length) return html`<p class="tc-muted">No credits have ever been granted.</p>`;
-    const canAdjust = this.allowed.has('credits:adjust');
 
     return html`
-      <div class="table-wrapper mb">
-        <table>
-          <thead><tr><th>Granted</th><th>Kind</th><th class="ta-right">Amount</th><th class="ta-right">Left</th><th>Why</th><th></th></tr></thead>
-          <tbody>
-            ${lots.map(lot => html`
-              <tr>
-                <td>${formatDateTime(lot.createdAt)}</td>
-                <td>${kindLabel(lot.kind)}</td>
-                <td class="ta-right">${formatCredits(lot.amount)}</td>
-                <td class="ta-right ${lot.remaining < 0 ? 'tc-danger' : ''}">
-                  ${formatCredits(lot.remaining)}
-                </td>
-                <td>
-                  ${lot.reason}${lot.referenceOwner ? html` <span class="tc-muted">· ${lot.referenceOwner} ${lot.referenceId}</span>` : nothing}
-                  ${lot.note ? html`<span class="d-b tc-muted">${lot.note}</span>` : nothing}
-                </td>
-                <td>
-                  ${canAdjust ? html`<button class="link" @click=${() => this.openTarget({ kind: 'lot', id: lot.id, label: `${formatCredits(lot.amount)} ${kindLabel(lot.kind).toLowerCase()} credits from ${formatDate(lot.createdAt)}` })}>Claw back</button>` : nothing}
-                </td>
-              </tr>
-            `)}
-          </tbody>
-        </table>
-      </div>
+      <k-table id="lotsTable" @creditsAction=${event => this.rowAction(event.detail)}>
+        <k-cred-row-action slot="after" action="clawback" label="Claw back"></k-cred-row-action>
+      </k-table>
     `;
   }
 
   #renderEntries(){
     if(!this.entries.length) return html`<p class="tc-muted">No entries.</p>`;
-    const canAdjust = this.allowed.has('credits:adjust');
-    const shownSpends = new Set();
 
     return html`
-      <div class="table-wrapper">
-        <table>
-          <thead><tr><th>When</th><th>What</th><th class="ta-right">Credits</th><th>Why</th><th>By</th><th></th></tr></thead>
-          <tbody>
-            ${this.entries.map(entry => {
-              /*
-                A spend drawn from several lots is several entries in one operation. The reverse
-                button goes on the first of them only — reversing undoes the whole operation.
-              */
-              const reversible = canAdjust && entry.type === 'spend' && !shownSpends.has(entry.operationId);
-              if(entry.type === 'spend') shownSpends.add(entry.operationId);
-              const operationAmount = this.entries.filter(other => other.operationId === entry.operationId && other.type === 'spend').reduce((sum, other) => sum - other.amount, 0);
-              return html`
-                <tr>
-                  <td>${formatDateTime(entry.createdAt)}</td>
-                  <td>
-                    ${entryLabel(entry.type)}${entry.counterpartyId ? html` ${entry.type === 'transfer_out' ? 'to' : 'from'} ${this.counterparties[entry.counterpartyId]?.name || html`<span class="ff-mono">${entry.counterpartyId}</span>`}` : nothing}
-                    <span class="tc-muted d-b">${kindLabel(entry.kind)}</span>
-                  </td>
-                  <td class="ta-right ${entry.amount < 0 ? '' : 'tc-success'}">${signed(entry.amount)}</td>
-                  <td>
-                    ${entry.reason || ''}${entry.referenceOwner ? html` <span class="tc-muted">· ${entry.referenceOwner} ${entry.referenceId}</span>` : nothing}
-                    ${entry.note ? html`<span class="d-b tc-muted">${entry.note}</span>` : nothing}
-                    ${entry.reversesOperationId ? html`<span class="d-b tc-muted">reverses ${entry.reversesOperationId}</span>` : nothing}
-                  </td>
-                  <td class="tc-muted">${!entry.actorId ? 'The site' : this.actors[entry.actorId]?.name || html`<span class="ff-mono">${entry.actorId}</span>`}</td>
-                  <td>${reversible ? html`<button class="link" @click=${() => this.openTarget({ kind: 'spend', id: entry.operationId, amount: operationAmount })}>Reverse</button>` : nothing}</td>
-                </tr>
-              `;
-            })}
-          </tbody>
-        </table>
-      </div>
-      ${this.entryTotal > PAGE ? html`
-        <div class="d-f pager">
-          <button ?disabled=${this.offset === 0} @click=${() => this.page(-1)}>Newer</button>
-          <span class="tc-muted">${this.offset + 1}–${Math.min(this.offset + PAGE, this.entryTotal)} of ${this.entryTotal}</span>
-          <button ?disabled=${this.offset + PAGE >= this.entryTotal} @click=${() => this.page(1)}>Older</button>
+      <k-table id="ledgerTable" enable-pages page-size=${PAGE} page-size-options="[10,25,50]" @creditsAction=${event => this.rowAction(event.detail)}>
+        <k-cred-row-action slot="after" action="reverse" label="Reverse"></k-cred-row-action>
+        <div class="d-f full" style="align-items: center;">
+          <div>
+            <kc-tc-first-page></kc-tc-first-page>
+            <kc-tc-prev-page></kc-tc-prev-page>
+            <kc-tc-next-page></kc-tc-next-page>
+            <kc-tc-last-page></kc-tc-last-page>
+          </div>
+          <div class="flex"></div>
+          <div><kc-tc-page-select></kc-tc-page-select></div>
+          <div class="flex"></div>
+          <div><kc-tc-page-size></kc-tc-page-size></div>
         </div>
-      ` : nothing}
+      </k-table>
     `;
   }
 
