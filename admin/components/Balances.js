@@ -21,7 +21,7 @@ const PAGE = 25;
 const ACCOUNT = '/admin/extension/kempo-credits/account/';
 
 const fields = [
-  { name: 'nameLink', label: 'User', editable: false, formatter: value => value },
+  { name: 'name', label: 'User', editable: false, calculator: account => account.name || 'No such user' },
   { name: 'email', label: 'Email', size: 260, editable: false, calculator: account => account.email || account.userId },
   {
     name: 'total', label: 'Balance', size: 200, editable: false,
@@ -29,9 +29,6 @@ const fields = [
   },
   { name: 'lastActivity', label: 'Last change', size: 180, editable: false, formatter: v => v ? formatDateTime(v) : 'Never' },
 ];
-
-const escapeHtml = value => String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
-
 
 export default class Balances extends ShadowComponent {
   static properties = {
@@ -111,7 +108,7 @@ const pane = this.closest('k-tab-content');
   updated(changed){
     if(!changed.has('accounts')) return;
     this.renderRoot.querySelector('k-table')?.setData({
-      records: this.accounts.map(account => ({ ...account, nameLink: `<a href="${ACCOUNT}?user=${encodeURIComponent(account.userId)}">${escapeHtml(account.name || 'No such user')}</a>`, _url: `${ACCOUNT}?user=${encodeURIComponent(account.userId)}` })),
+      records: this.accounts.map(account => ({ ...account, _url: `${ACCOUNT}?user=${encodeURIComponent(account.userId)}` })),
       fields,
     });
   }

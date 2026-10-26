@@ -341,7 +341,7 @@ const tests = {
     const balances = page.locator('k-cred-balances');
     await balances.getByText('Credits held').waitFor();
     await balances.getByPlaceholder(/Find a user/).fill('Alice');
-    await balances.getByRole('link', { name: 'Alice Member' }).click();
+    await balances.getByText('Alice Member').click();
     await page.waitForURL(/account\/\?user=/);
     await page.locator('k-cred-account').getByText('Alice Member').first().waitFor();
     if(!page.url().includes(state.ids.alice)) return fail(`the address does not name the user: ${page.url()}`);
