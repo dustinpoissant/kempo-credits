@@ -6,6 +6,18 @@ All notable changes to `kempo-credits` are documented in this file.
 
 ### Added
 
+- **A `credits-admin-tabs` location** on the Credits admin page, after its own tabs, so other extensions can add a tab (kempo-credit-claims adds Promotional links this way).
+
+### Changed
+
+- **The Credits tab of a product form** is contributed through the `products-admin-product-tabs` location (`admin/product-tab.global.html`), so it appears on products while this extension is installed.
+
+- **The Credits admin page's tabs use hash routing**, so each tab has its own address. The remembered tab (`persistent-id`) is removed, as on the other tab pages. `?tab=` links still open the named tab.
+
+### Added
+
+- **The `credits_per_unit` setting** (how many credits equal one whole unit of the currency, default 100) is kempo-credits' now, on its Settings tab. It was kempo-products' setting, which is removed there. An update here moves a value kempo-products still holds into this setting, once.
+
 - Registers the **Credits Only** product type (`credits-only`, no shipping) on install and update, so a credit pack is sold as that product type. kempo-products is optional: credits still work without it, and the type is registered when it is there.
 - **The account page shows the customer's credits** and a **Credit history** button, through the account page's new `account-details` and `account-links` places (`public/account.global.html`).
 

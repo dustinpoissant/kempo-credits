@@ -42,6 +42,12 @@
   ],
   "settings": [
     {
+      "name": "credits_per_unit",
+      "value": "100",
+      "type": "number",
+      "description": "How many credits are worth one whole unit of the store's currency, used when a product accepts credits as payment. 100 means 1 credit is worth 1 cent"
+    },
+    {
       "name": "low_balance_threshold",
       "value": "0",
       "type": "number",

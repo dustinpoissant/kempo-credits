@@ -14,11 +14,13 @@ export const OWNER = 'kempo-credits';
   The same values kempo-config.json declares, as the real types. A static test checks they agree.
 */
 export const DEFAULTS = {
+  creditsPerUnit: 100,
   lowBalanceThreshold: 0,
   nonTransferableKinds: '',
 };
 
 export const SETTING_NAMES = {
+  creditsPerUnit: 'credits_per_unit',
   lowBalanceThreshold: 'low_balance_threshold',
   nonTransferableKinds: 'non_transferable_kinds',
 };
@@ -41,6 +43,7 @@ const labels = (value, fallback) => {
 };
 
 export const NORMALISE = {
+  creditsPerUnit: value => count(value, DEFAULTS.creditsPerUnit, 1),
   lowBalanceThreshold: value => count(value, DEFAULTS.lowBalanceThreshold),
   nonTransferableKinds: value => labels(value, DEFAULTS.nonTransferableKinds),
 };

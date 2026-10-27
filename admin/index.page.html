@@ -18,7 +18,7 @@ locked: true
       extensions.
     </p>
 
-    <k-tabs id="tabs" active="balances" persistent-id="kempo-credits-admin-tab">
+    <k-tabs id="tabs" active="balances" hash-routing>
       <k-tab id="balancesTab" for="balances">Balances</k-tab>
       <k-tab id="grantTab" for="grant">Give credits</k-tab>
       <k-tab id="settingsTab" for="settings">Settings</k-tab>
@@ -34,6 +34,8 @@ locked: true
       <k-tab-content id="settingsContent" name="settings">
         <k-cred-settings></k-cred-settings>
       </k-tab-content>
+
+      <location name="credits-admin-tabs" />
     </k-tabs>
 
     <!--
@@ -59,6 +61,7 @@ locked: true
       balances: permissions.has('credits:view'),
       grant: permissions.has('credits:grant'),
       settings: permissions.has('credits:settings'),
+      claims: permissions.has('credit-claims:manage'),
     };
 
     /*

@@ -269,6 +269,7 @@ double click applies once. A `note` is optional; when given, the ledger keeps it
 
 | Setting | Default | |
 |---|---|---|
+| `credits_per_unit` | `100` | How many credits equal one whole unit of the store's currency, used when a product accepts credits as payment. 100 means 1 credit is 1 cent. |
 | `low_balance_threshold` | `0` | Fires `credits:low` below this. 0 is off. |
 | `non_transferable_kinds` | *(empty)* | Comma-separated kinds that can be spent but never sent to another account. |
 

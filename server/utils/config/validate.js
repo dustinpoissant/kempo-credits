@@ -28,6 +28,7 @@ const kinds = label => value => {
 };
 
 export const VALIDATORS = {
+  credits_per_unit: number('Credits per unit', 1, 1000000),
   low_balance_threshold: number('The low-balance threshold', 0, 1000000000),
   non_transferable_kinds: kinds('Non-transferable kinds'),
 };

@@ -13,6 +13,7 @@ import { getSettings, saveSettings } from '/credits/sdk.js';
 */
 
 const GROUPS = [
+  { title: 'Value', note: 'Products that accept credits as payment use this rate. Products that give credits are not affected.', names: ['credits_per_unit'] },
   { title: 'Balances', note: 'Credits never expire.', names: ['low_balance_threshold'] },
   {
     title: 'Transfers',
@@ -22,6 +23,7 @@ const GROUPS = [
 ];
 
 const LABELS = {
+  credits_per_unit: 'Credits that equal one whole currency unit',
   low_balance_threshold: 'Low-balance threshold',
   non_transferable_kinds: 'Kinds that cannot be sent',
 };
