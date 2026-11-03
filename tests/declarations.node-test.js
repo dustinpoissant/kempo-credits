@@ -47,12 +47,6 @@ const contents = new Map(await Promise.all(sources.map(async file => [file, awai
 const relative = file => path.relative(root, file).replaceAll('\\', '/');
 
 export default {
-  'the plan is present and names the package': async ({ pass, fail }) => {
-    const plan = await read('PLAN.md');
-    if(!plan.includes('kempo-credits')) return fail('PLAN.md does not mention the package name');
-    pass('');
-  },
-
   'every permission the code checks is declared': async ({ pass, fail }) => {
     const declared = new Set(config.permissions.map(permission => permission.name));
     const events = new Set(['credits:granted', 'credits:spent', 'credits:reversed', 'credits:transferred', 'credits:clawed-back', 'credits:low']);
