@@ -10,6 +10,9 @@ All notable changes to `kempo-credits` are documented in this file.
 
 ### Changed
 
+- The `kempo-ui` peer dependency is now `>=1.0.0`.
+- The `kempo` peer dependency is now `>=4.10.2`.
+
 - **The Credits tab of a product form** is contributed through the `products-admin-product-tabs` location (`admin/product-tab.global.html`), so it appears on products while this extension is installed.
 
 - **The Credits admin page's tabs use hash routing**, so each tab has its own address. The remembered tab (`persistent-id`) is removed, as on the other tab pages. `?tab=` links still open the named tab.
