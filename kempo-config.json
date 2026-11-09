@@ -3,6 +3,9 @@
   "git": "https://github.com/dustinpoissant/kempo-credits",
   "public-scope": "credits",
   "schema": "./server/db/schema.js",
+  "suggestedPeers": [
+    { "name": "kempo-products", "reason": "Sell credits as products" }
+  ],
   "widgets": [
     {
       "key": "summary",

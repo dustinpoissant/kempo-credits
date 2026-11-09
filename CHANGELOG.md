@@ -4,6 +4,10 @@ All notable changes to `kempo-credits` are documented in this file.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-09
+
+Requires kempo 4.11.0 or later.
+
 ### Added
 
 - **A `credits-admin-tabs` location** on the Credits admin page, after its own tabs, so other extensions can add a tab (kempo-credit-claims adds Promotional links this way).
@@ -11,7 +15,7 @@ All notable changes to `kempo-credits` are documented in this file.
 ### Changed
 
 - The `kempo-ui` peer dependency is now `>=1.0.0`.
-- The `kempo` peer dependency is now `>=4.10.2`.
+- The `kempo` peer dependency is now `>=4.11.0`.
 
 - **The Credits tab of a product form** is contributed through the `products-admin-product-tabs` location (`admin/product-tab.global.html`), so it appears on products while this extension is installed.
 
